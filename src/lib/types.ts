@@ -43,7 +43,10 @@ export function getSessionStatus(session: Session, now: Date = new Date()): Sess
   if (session.paid_at) return "paid";
   if (session.finished_at) return "finished";
 
-  const start = new Date(`${session.session_date}T${session.start_time}`);
+  // +07:00 makes this an absolute instant regardless of the server/browser's own timezone
+  // (a bare "YYYY-MM-DDTHH:mm" string is parsed as *local* time, which is wrong on servers
+  // that don't run in Thailand's timezone, e.g. Vercel's UTC serverless functions).
+  const start = new Date(`${session.session_date}T${session.start_time}+07:00`);
   if (now < start) return "scheduled";
   return "teaching";
 }

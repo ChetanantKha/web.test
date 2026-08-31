@@ -1,9 +1,18 @@
-/** Local YYYY-MM-DD for a Date, avoiding the UTC-shift bugs of toISOString() in UTC+ timezones. */
+/**
+ * YYYY-MM-DD in Thailand time, regardless of the server's own OS timezone.
+ * Using the server/browser's local getters (getFullYear/getMonth/getDate) would give the
+ * wrong date whenever the host isn't already set to Asia/Bangkok — e.g. Vercel's serverless
+ * functions run in UTC, so during 00:00-06:59 Thai time they're still on the previous UTC day.
+ */
+const thaiDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Bangkok",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
 export function toLocalISODate(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  return thaiDateFormatter.format(date);
 }
 
 export function todayLocalISO(): string {

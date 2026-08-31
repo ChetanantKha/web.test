@@ -33,7 +33,7 @@ export default function FinishPrompt({ instructorId }: { instructorId: string })
       .limit(20);
 
     const overdue = ((data ?? []) as unknown as DueSession[]).find((s) => {
-      const end = new Date(`${s.session_date}T${s.end_time}`);
+      const end = new Date(`${s.session_date}T${s.end_time}+07:00`);
       return end.toISOString() <= nowIso;
     });
 
