@@ -201,7 +201,7 @@ export default function PendingApprovals() {
                     <img
                       src={item.profiles.qr_code_url}
                       alt="QR พร้อมเพย์"
-                      className="mt-2 h-32 w-32 rounded border border-gray-200 object-contain"
+                      className="mx-auto mt-2 h-64 w-64 max-w-full rounded-lg border border-gray-200 bg-white object-contain p-2"
                     />
                   )}
                   <div className="mt-2 flex gap-2">
