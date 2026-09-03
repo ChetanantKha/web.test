@@ -13,8 +13,9 @@ export default async function ListPage({
 }) {
   const supabase = await createClient();
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
   if (!user) redirect("/login");
 
   const { data: me } = await supabase.from("profiles").select("role").eq("id", user.id).single();

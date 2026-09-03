@@ -6,8 +6,9 @@ import { createClient } from "@/lib/supabase/server";
 export async function confirmFinished(sessionId: string) {
   const supabase = await createClient();
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
   if (!user) throw new Error("ไม่ได้เข้าสู่ระบบ");
 
   const { data: existing } = await supabase.from("sessions").select("*").eq("id", sessionId).single();
@@ -35,8 +36,9 @@ export async function confirmFinished(sessionId: string) {
 export async function updateOwnPayoutInfo(formData: FormData) {
   const supabase = await createClient();
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
+  const user = session?.user ?? null;
   if (!user) throw new Error("ไม่ได้เข้าสู่ระบบ");
 
   let qrCodeUrl = String(formData.get("existing_qr_code_url") || "") || null;
