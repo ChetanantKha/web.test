@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createSchedule, updateSchedule, deleteSchedule } from "@/app/admin/actions";
+import { createSchedule, createBulkSchedule, updateSchedule, deleteSchedule } from "@/app/admin/actions";
 import type { Session } from "@/lib/types";
 
 type Instructor = { id: string; full_name: string };
@@ -25,8 +25,11 @@ export default function ScheduleForm({
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [startTime, setStartTime] = useState(editing?.start_time.slice(0, 5) ?? prefillStart ?? "");
+  const [bulkMode, setBulkMode] = useState(false);
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
 
   function defaultEndTime(start: string) {
     if (!start) return "";
@@ -35,21 +38,44 @@ export default function ScheduleForm({
     return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
   }
 
+  function toggleChecked(id: string) {
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   return (
     <form
       ref={formRef}
       action={(formData) => {
         setError(null);
+        setNotice(null);
         startTransition(async () => {
           try {
             if (editing) {
               await updateSchedule(editing.id, formData);
+              onDone();
+            } else if (bulkMode) {
+              const result = await createBulkSchedule(formData);
+              formRef.current?.reset();
+              setStartTime("");
+              setCheckedIds(new Set());
+              if (result.failed.length === 0) {
+                setNotice(`จัดตารางสำเร็จ ${result.created} คน`);
+              } else {
+                setNotice(
+                  `สำเร็จ ${result.created} คน · ไม่สำเร็จ ${result.failed.length} คน: ` +
+                    result.failed.map((f) => `${f.name} (${f.reason})`).join(", "),
+                );
+              }
             } else {
               await createSchedule(formData);
               formRef.current?.reset();
               setStartTime("");
             }
-            onDone();
             router.refresh();
           } catch (e) {
             setError(e instanceof Error ? e.message : "เกิดข้อผิดพลาด");
@@ -67,38 +93,23 @@ export default function ScheduleForm({
         )}
       </div>
 
+      {!editing && (
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={bulkMode}
+            onChange={(e) => {
+              setBulkMode(e.target.checked);
+              setCheckedIds(new Set());
+            }}
+          />
+          จัดให้ผู้สอนหลายคน (คนละคลาส เวลาเดียวกัน)
+        </label>
+      )}
+
       <input type="hidden" name="session_date" value={date} />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="space-y-1">
-          <label className="block text-sm font-medium">ผู้สอน</label>
-          <select
-            name="instructor_id"
-            required
-            defaultValue={editing?.instructor_id ?? ""}
-            className={inputClass}
-          >
-            <option value="" disabled>
-              เลือกผู้สอน
-            </option>
-            {instructors.map((i) => (
-              <option key={i.id} value={i.id}>
-                {i.full_name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="space-y-1">
-          <label className="block text-sm font-medium">ชื่อผู้เรียน</label>
-          <input
-            name="student_name"
-            defaultValue={editing?.student_name ?? ""}
-            className={inputClass}
-            placeholder="พิมพ์ชื่อ (คั่นด้วย , ถ้ามีหลายคน)"
-          />
-        </div>
-
         <div className="space-y-1">
           <label className="block text-sm font-medium">เวลาเริ่ม</label>
           <input
@@ -123,29 +134,107 @@ export default function ScheduleForm({
           />
         </div>
 
-        <div className="space-y-1 sm:col-span-2">
-          <label className="block text-sm font-medium">ราคาที่ลูกค้าจ่าย (บาท)</label>
-          <input
-            type="number"
-            name="price"
-            min={0}
-            step="0.01"
-            required
-            defaultValue={editing?.price ?? ""}
-            className={inputClass}
-          />
-        </div>
+        {!bulkMode && (
+          <>
+            <div className="space-y-1">
+              <label className="block text-sm font-medium">ผู้สอน</label>
+              <select
+                name="instructor_id"
+                required
+                defaultValue={editing?.instructor_id ?? ""}
+                className={inputClass}
+              >
+                <option value="" disabled>
+                  เลือกผู้สอน
+                </option>
+                {instructors.map((i) => (
+                  <option key={i.id} value={i.id}>
+                    {i.full_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-sm font-medium">ชื่อผู้เรียน</label>
+              <input
+                name="student_name"
+                defaultValue={editing?.student_name ?? ""}
+                className={inputClass}
+                placeholder="พิมพ์ชื่อ (คั่นด้วย , ถ้ามีหลายคน)"
+              />
+            </div>
+
+            <div className="space-y-1 sm:col-span-2">
+              <label className="block text-sm font-medium">ราคาที่ลูกค้าจ่าย (บาท)</label>
+              <input
+                type="number"
+                name="price"
+                min={0}
+                step="0.01"
+                required
+                defaultValue={editing?.price ?? ""}
+                className={inputClass}
+              />
+            </div>
+          </>
+        )}
       </div>
 
+      {bulkMode && (
+        <div className="space-y-2">
+          <label className="block text-sm font-medium">เลือกผู้สอน (ติ๊กได้หลายคน)</label>
+          <div className="space-y-2 rounded-lg border border-gray-200 p-2">
+            {instructors.map((i) => {
+              const checked = checkedIds.has(i.id);
+              return (
+                <div key={i.id} className="rounded-lg border border-gray-100 p-2">
+                  <label className="flex items-center gap-2 text-sm font-medium">
+                    <input
+                      type="checkbox"
+                      name="instructor_ids"
+                      value={i.id}
+                      checked={checked}
+                      onChange={() => toggleChecked(i.id)}
+                    />
+                    {i.full_name}
+                  </label>
+                  {checked && (
+                    <div className="mt-2 grid grid-cols-1 gap-2 pl-6 sm:grid-cols-2">
+                      <input
+                        name={`student_name__${i.id}`}
+                        placeholder="ชื่อผู้เรียน"
+                        className={inputClass}
+                      />
+                      <input
+                        type="number"
+                        name={`price__${i.id}`}
+                        min={0}
+                        step="0.01"
+                        required
+                        placeholder="ราคา (บาท)"
+                        className={inputClass}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {instructors.length === 0 && <p className="text-sm text-gray-500">ไม่มีผู้สอน</p>}
+          </div>
+        </div>
+      )}
+
       {error && <p className="text-sm text-red-600">{error}</p>}
+      {notice && <p className="text-sm text-gray-700">{notice}</p>}
 
       <div className="flex gap-2">
         <button
           type="submit"
-          disabled={pending}
+          disabled={pending || (bulkMode && checkedIds.size === 0)}
           className="rounded-lg bg-gradient-to-r from-rose-500 to-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
-          {pending ? "กำลังบันทึก..." : editing ? "บันทึกการแก้ไข" : "จัดตาราง"}
+          {pending ? "กำลังบันทึก..." : editing ? "บันทึกการแก้ไข" : bulkMode ? "จัดตารางทั้งหมด" : "จัดตาราง"}
         </button>
         {editing && (
           <button

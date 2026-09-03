@@ -136,6 +136,65 @@ export async function createSchedule(formData: FormData) {
   revalidatePath("/admin/list");
 }
 
+export type BulkScheduleResult = {
+  created: number;
+  failed: { name: string; reason: string }[];
+};
+
+/** One shared date/time, one row per checked instructor (own student_name + price each). */
+export async function createBulkSchedule(formData: FormData): Promise<BulkScheduleResult> {
+  const { supabase, adminId } = await requireAdmin();
+
+  const session_date = String(formData.get("session_date") || "");
+  const start_time = String(formData.get("start_time") || "");
+  const end_time = String(formData.get("end_time") || "");
+  if (end_time <= start_time) throw new Error("เวลาสิ้นสุดต้องหลังเวลาเริ่ม");
+
+  const instructorIds = formData.getAll("instructor_ids").map(String);
+  if (instructorIds.length === 0) throw new Error("กรุณาเลือกผู้สอนอย่างน้อย 1 คน");
+
+  const result: BulkScheduleResult = { created: 0, failed: [] };
+
+  for (const instructorId of instructorIds) {
+    const { data: instructor } = await supabase
+      .from("profiles")
+      .select("full_name, rate_type, rate_value")
+      .eq("id", instructorId)
+      .single();
+    const name = instructor?.full_name ?? instructorId;
+
+    try {
+      if (!instructor) throw new Error("ไม่พบผู้สอน");
+
+      await assertNoOverlap(supabase, instructorId, session_date, start_time, end_time);
+
+      const student_name = String(formData.get(`student_name__${instructorId}`) || "") || null;
+      const price = Number(formData.get(`price__${instructorId}`) || 0);
+      const instructor_payout = computePayout(instructor.rate_type, instructor.rate_value, price);
+
+      const { error } = await supabase.from("sessions").insert({
+        instructor_id: instructorId,
+        student_name,
+        session_date,
+        start_time,
+        end_time,
+        price,
+        instructor_payout,
+        created_by: adminId,
+      });
+      if (error) throw new Error(error.message);
+
+      result.created += 1;
+    } catch (e) {
+      result.failed.push({ name, reason: e instanceof Error ? e.message : "เกิดข้อผิดพลาด" });
+    }
+  }
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/list");
+  return result;
+}
+
 export async function updateSchedule(sessionId: string, formData: FormData) {
   const { supabase, adminId } = await requireAdmin();
 
