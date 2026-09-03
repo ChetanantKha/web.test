@@ -23,7 +23,7 @@ export default function InstructorRow({ profile }: { profile: Profile }) {
             </span>
           </p>
           <p className="text-gray-500">
-            ชื่อเล่นล็อกอิน: {profile.nickname || "ยังไม่ตั้ง"} · อัตรา{" "}
+            ชื่อเล่นล็อกอิน: {profile.nicknames.length > 0 ? profile.nicknames.join(", ") : "ยังไม่ตั้ง"} · อัตรา{" "}
             {profile.rate_type === "fixed" ? `${profile.rate_value} บาท/รอบ` : `${profile.rate_value}%`}
           </p>
         </div>
@@ -58,11 +58,11 @@ export default function InstructorRow({ profile }: { profile: Profile }) {
             />
           </div>
           <div className="space-y-1">
-            <label className="block font-medium">ชื่อเล่น (ใช้ล็อกอิน)</label>
+            <label className="block font-medium">ชื่อเล่น (ใช้ล็อกอิน ใส่ได้หลายชื่อ คั่นด้วยจุลภาค)</label>
             <input
-              name="nickname"
-              defaultValue={profile.nickname ?? ""}
-              placeholder="เช่น เอ, บอย, พี่หนึ่ง"
+              name="nicknames"
+              defaultValue={profile.nicknames.join(", ")}
+              placeholder="เช่น พีนัท, peanut, พี่นัท"
               className="w-full rounded-lg border border-gray-300 px-3 py-2"
             />
           </div>

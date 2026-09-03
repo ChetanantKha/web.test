@@ -23,7 +23,7 @@ create table profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   role text not null check (role in ('admin', 'instructor')) default 'instructor',
   full_name text not null,
-  nickname text unique,
+  nicknames text[] not null default '{}', -- same account can log in under several nicknames
   email text,
   phone text,
   rate_type text check (rate_type in ('fixed', 'percent')) default 'percent',
@@ -100,7 +100,9 @@ language sql
 security definer
 set search_path = public
 as $$
-  select email from profiles where lower(nickname) = lower(p_nickname) and is_active limit 1;
+  select email from profiles
+  where is_active and exists (select 1 from unnest(nicknames) n where lower(n) = lower(p_nickname))
+  limit 1;
 $$;
 
 grant execute on function email_for_nickname(text) to anon, authenticated;

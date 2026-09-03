@@ -2,7 +2,7 @@ export type Profile = {
   id: string;
   role: "admin" | "instructor";
   full_name: string;
-  nickname: string | null;
+  nicknames: string[];
   phone: string | null;
   rate_type: "fixed" | "percent";
   rate_value: number;
