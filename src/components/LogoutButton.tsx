@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
-export default function LogoutButton() {
+export default function LogoutButton({ variant = "light" }: { variant?: "light" | "dark" }) {
   const router = useRouter();
   const supabase = createClient();
 
@@ -16,7 +16,11 @@ export default function LogoutButton() {
   return (
     <button
       onClick={handleLogout}
-      className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100"
+      className={
+        variant === "dark"
+          ? "rounded-lg border border-white/30 px-3 py-1.5 text-sm text-white hover:bg-white/10"
+          : "rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100"
+      }
     >
       ออกจากระบบ
     </button>

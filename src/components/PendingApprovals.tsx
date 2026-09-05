@@ -221,7 +221,7 @@ export default function PendingApprovals() {
                   <button
                     disabled={pending}
                     onClick={() => handleApproveAll(group.instructorId)}
-                    className="mt-2 w-full rounded-lg bg-gradient-to-r from-rose-500 to-blue-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                    className="mt-2 w-full rounded-lg bg-gradient-to-r from-orange-500 to-red-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
                   >
                     อนุมัติทั้งหมด ({group.total.toLocaleString()} บาท)
                   </button>

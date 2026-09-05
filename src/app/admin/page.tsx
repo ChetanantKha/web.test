@@ -37,7 +37,7 @@ export default async function AdminPage() {
         </div>
         <Link
           href={`/admin/calendar/${today}`}
-          className="rounded-lg bg-gradient-to-r from-rose-500 to-blue-600 px-3 py-1.5 text-sm font-medium text-white"
+          className="rounded-lg bg-gradient-to-r from-orange-500 to-red-600 px-3 py-1.5 text-sm font-medium text-white"
         >
           + จัดตารางวันนี้
         </Link>

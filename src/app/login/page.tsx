@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { loginWithNickname } from "@/app/login/actions";
 
 export default function LoginPage() {
@@ -27,7 +28,15 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex flex-1 items-center justify-center p-4">
+    <div className="flex flex-1 flex-col items-center justify-center gap-6 p-4">
+      <Image
+        src="/logo.jpg"
+        alt="T-STAR Academy"
+        width={112}
+        height={112}
+        priority
+        className="rounded-2xl shadow-lg"
+      />
       <form
         onSubmit={handleSubmit}
         className="w-full max-w-sm space-y-4 rounded-xl border border-gray-200 bg-white p-6 shadow-sm"
@@ -55,7 +64,7 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-lg bg-gradient-to-r from-rose-500 to-blue-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="w-full rounded-lg bg-gradient-to-r from-orange-500 to-red-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
           {loading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
         </button>

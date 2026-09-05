@@ -156,7 +156,7 @@ export default function InstructorRow({ profile }: { profile: Profile }) {
           <button
             type="submit"
             disabled={pending}
-            className="rounded-lg bg-gradient-to-r from-rose-500 to-blue-600 px-4 py-2 font-medium text-white disabled:opacity-50 sm:col-span-2"
+            className="rounded-lg bg-gradient-to-r from-orange-500 to-red-600 px-4 py-2 font-medium text-white disabled:opacity-50 sm:col-span-2"
           >
             {pending ? "กำลังบันทึก..." : "บันทึก"}
           </button>

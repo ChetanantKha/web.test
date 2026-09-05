@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import LogoutButton from "@/components/LogoutButton";
 import FinishPrompt from "@/components/FinishPrompt";
@@ -13,8 +14,12 @@ export default async function StaffLayout({ children }: { children: React.ReactN
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-4 p-4">
-      <div className="flex items-center justify-end rounded-xl border border-white/60 bg-gradient-to-r from-rose-50 to-blue-50 p-3 shadow-sm">
-        <LogoutButton />
+      <div className="flex items-center justify-between gap-3 rounded-xl bg-gradient-to-r from-blue-950 to-blue-900 p-3 shadow-md">
+        <div className="flex items-center gap-3">
+          <Image src="/logo.jpg" alt="T-STAR Academy" width={36} height={36} className="rounded-lg" />
+          <span className="hidden text-sm font-semibold tracking-wide text-white sm:inline">T-STAR ACADEMY</span>
+        </div>
+        <LogoutButton variant="dark" />
       </div>
       {children}
       <FinishPrompt instructorId={user.id} />
