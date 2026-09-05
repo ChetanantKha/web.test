@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createSchedule, createBulkSchedule, updateSchedule, deleteSchedule } from "@/app/admin/actions";
+import { COURSE_TYPE_LABEL, type CourseType } from "@/lib/courseTypes";
 import type { Session } from "@/lib/types";
 
 type Instructor = { id: string; full_name: string };
@@ -10,6 +11,7 @@ type Instructor = { id: string; full_name: string };
 export default function ScheduleForm({
   date,
   instructors,
+  studentNames,
   slotMinutes,
   editing,
   prefillStart,
@@ -17,6 +19,7 @@ export default function ScheduleForm({
 }: {
   date: string;
   instructors: Instructor[];
+  studentNames: string[];
   slotMinutes: number;
   editing: Session | null;
   prefillStart: string | null;
@@ -30,6 +33,8 @@ export default function ScheduleForm({
   const [startTime, setStartTime] = useState(editing?.start_time.slice(0, 5) ?? prefillStart ?? "");
   const [bulkMode, setBulkMode] = useState(false);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+  const [courseType, setCourseType] = useState<CourseType>((editing?.course_type as CourseType) ?? "hourly");
+  const [bulkCourseTypes, setBulkCourseTypes] = useState<Record<string, CourseType>>({});
 
   function defaultEndTime(start: string) {
     if (!start) return "";
@@ -63,6 +68,7 @@ export default function ScheduleForm({
               formRef.current?.reset();
               setStartTime("");
               setCheckedIds(new Set());
+              setBulkCourseTypes({});
               if (result.failed.length === 0) {
                 setNotice(`จัดตารางสำเร็จ ${result.created} คน`);
               } else {
@@ -75,6 +81,7 @@ export default function ScheduleForm({
               await createSchedule(formData);
               formRef.current?.reset();
               setStartTime("");
+              setCourseType("hourly");
             }
             router.refresh();
           } catch (e) {
@@ -108,6 +115,12 @@ export default function ScheduleForm({
       )}
 
       <input type="hidden" name="session_date" value={date} />
+
+      <datalist id="student-name-options">
+        {studentNames.map((name) => (
+          <option key={name} value={name} />
+        ))}
+      </datalist>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1">
@@ -159,24 +172,43 @@ export default function ScheduleForm({
               <label className="block text-sm font-medium">ชื่อผู้เรียน</label>
               <input
                 name="student_name"
+                list="student-name-options"
                 defaultValue={editing?.student_name ?? ""}
                 className={inputClass}
                 placeholder="พิมพ์ชื่อ (คั่นด้วย , ถ้ามีหลายคน)"
               />
             </div>
 
-            <div className="space-y-1 sm:col-span-2">
-              <label className="block text-sm font-medium">ราคาที่ลูกค้าจ่าย (บาท)</label>
-              <input
-                type="number"
-                name="price"
-                min={0}
-                step="0.01"
-                required
-                defaultValue={editing?.price ?? ""}
+            <div className="space-y-1">
+              <label className="block text-sm font-medium">ประเภทคอร์ส</label>
+              <select
+                name="course_type"
+                value={courseType}
+                onChange={(e) => setCourseType(e.target.value as CourseType)}
                 className={inputClass}
-              />
+              >
+                {Object.entries(COURSE_TYPE_LABEL).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
             </div>
+
+            {courseType === "custom" && (
+              <div className="space-y-1">
+                <label className="block text-sm font-medium">ราคาที่ลูกค้าจ่าย (บาท)</label>
+                <input
+                  type="number"
+                  name="price"
+                  min={0}
+                  step="0.01"
+                  required
+                  defaultValue={editing?.price ?? ""}
+                  className={inputClass}
+                />
+              </div>
+            )}
           </>
         )}
       </div>
@@ -187,6 +219,7 @@ export default function ScheduleForm({
           <div className="space-y-2 rounded-lg border border-gray-200 p-2">
             {instructors.map((i) => {
               const checked = checkedIds.has(i.id);
+              const rowCourseType = bulkCourseTypes[i.id] ?? "hourly";
               return (
                 <div key={i.id} className="rounded-lg border border-gray-100 p-2">
                   <label className="flex items-center gap-2 text-sm font-medium">
@@ -203,18 +236,35 @@ export default function ScheduleForm({
                     <div className="mt-2 grid grid-cols-1 gap-2 pl-6 sm:grid-cols-2">
                       <input
                         name={`student_name__${i.id}`}
+                        list="student-name-options"
                         placeholder="ชื่อผู้เรียน"
                         className={inputClass}
                       />
-                      <input
-                        type="number"
-                        name={`price__${i.id}`}
-                        min={0}
-                        step="0.01"
-                        required
-                        placeholder="ราคา (บาท)"
+                      <select
+                        name={`course_type__${i.id}`}
+                        value={rowCourseType}
+                        onChange={(e) =>
+                          setBulkCourseTypes((prev) => ({ ...prev, [i.id]: e.target.value as CourseType }))
+                        }
                         className={inputClass}
-                      />
+                      >
+                        {Object.entries(COURSE_TYPE_LABEL).map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                      {rowCourseType === "custom" && (
+                        <input
+                          type="number"
+                          name={`price__${i.id}`}
+                          min={0}
+                          step="0.01"
+                          required
+                          placeholder="ราคา (บาท)"
+                          className={`${inputClass} sm:col-span-2`}
+                        />
+                      )}
                     </div>
                   )}
                 </div>

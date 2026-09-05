@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { computePayout } from "@/lib/payout";
+import { FIXED_COURSE_TYPES, isFixedCourseType } from "@/lib/courseTypes";
 
 async function requireAdmin() {
   const supabase = await createClient();
@@ -112,13 +113,29 @@ function readScheduleFields(formData: FormData) {
     session_date: String(formData.get("session_date") || ""),
     start_time: String(formData.get("start_time") || ""),
     end_time: String(formData.get("end_time") || ""),
-    price: Number(formData.get("price") || 0),
+    course_type: String(formData.get("course_type") || "custom"),
+    custom_price: Number(formData.get("price") || 0),
   };
+}
+
+/** Fixed course types always pay the same amount regardless of instructor; "custom" falls
+ *  back to that instructor's own rate_type/rate_value (the pre-fixed-pricing behavior). */
+function resolvePricing(
+  courseType: string,
+  customPrice: number,
+  rateType: "fixed" | "percent",
+  rateValue: number,
+) {
+  if (isFixedCourseType(courseType)) {
+    const { price, payout } = FIXED_COURSE_TYPES[courseType];
+    return { price, instructor_payout: payout };
+  }
+  return { price: customPrice, instructor_payout: computePayout(rateType, rateValue, customPrice) };
 }
 
 export async function createSchedule(formData: FormData) {
   const { supabase, adminId } = await requireAdmin();
-  const fields = readScheduleFields(formData);
+  const { custom_price, ...fields } = readScheduleFields(formData);
   if (!fields.instructor_id) throw new Error("กรุณาเลือกผู้สอน");
   if (fields.end_time <= fields.start_time) throw new Error("เวลาสิ้นสุดต้องหลังเวลาเริ่ม");
 
@@ -131,11 +148,16 @@ export async function createSchedule(formData: FormData) {
     .single();
   if (!instructor) throw new Error("ไม่พบผู้สอน");
 
-  const instructor_payout = computePayout(instructor.rate_type, instructor.rate_value, fields.price);
+  const { price, instructor_payout } = resolvePricing(
+    fields.course_type,
+    custom_price,
+    instructor.rate_type,
+    instructor.rate_value,
+  );
 
   const { error } = await supabase
     .from("sessions")
-    .insert({ ...fields, instructor_payout, created_by: adminId });
+    .insert({ ...fields, price, instructor_payout, created_by: adminId });
   if (error) throw new Error(error.message);
 
   revalidatePath("/admin");
@@ -175,8 +197,14 @@ export async function createBulkSchedule(formData: FormData): Promise<BulkSchedu
       await assertNoOverlap(supabase, instructorId, session_date, start_time, end_time);
 
       const student_name = String(formData.get(`student_name__${instructorId}`) || "") || null;
-      const price = Number(formData.get(`price__${instructorId}`) || 0);
-      const instructor_payout = computePayout(instructor.rate_type, instructor.rate_value, price);
+      const course_type = String(formData.get(`course_type__${instructorId}`) || "custom");
+      const custom_price = Number(formData.get(`price__${instructorId}`) || 0);
+      const { price, instructor_payout } = resolvePricing(
+        course_type,
+        custom_price,
+        instructor.rate_type,
+        instructor.rate_value,
+      );
 
       const { error } = await supabase.from("sessions").insert({
         instructor_id: instructorId,
@@ -184,6 +212,7 @@ export async function createBulkSchedule(formData: FormData): Promise<BulkSchedu
         session_date,
         start_time,
         end_time,
+        course_type,
         price,
         instructor_payout,
         created_by: adminId,
@@ -207,7 +236,7 @@ export async function updateSchedule(sessionId: string, formData: FormData) {
   const { data: existing } = await supabase.from("sessions").select("*").eq("id", sessionId).single();
   if (!existing) throw new Error("ไม่พบรายการ");
 
-  const fields = readScheduleFields(formData);
+  const { custom_price, ...fields } = readScheduleFields(formData);
   if (fields.end_time <= fields.start_time) throw new Error("เวลาสิ้นสุดต้องหลังเวลาเริ่ม");
 
   await assertNoOverlap(
@@ -226,11 +255,16 @@ export async function updateSchedule(sessionId: string, formData: FormData) {
     .single();
   if (!instructor) throw new Error("ไม่พบผู้สอน");
 
-  const instructor_payout = computePayout(instructor.rate_type, instructor.rate_value, fields.price);
+  const { price, instructor_payout } = resolvePricing(
+    fields.course_type,
+    custom_price,
+    instructor.rate_type,
+    instructor.rate_value,
+  );
 
   const { error } = await supabase
     .from("sessions")
-    .update({ ...fields, instructor_payout, updated_at: new Date().toISOString() })
+    .update({ ...fields, price, instructor_payout, updated_at: new Date().toISOString() })
     .eq("id", sessionId);
   if (error) throw new Error(error.message);
 
@@ -239,7 +273,7 @@ export async function updateSchedule(sessionId: string, formData: FormData) {
     action: "update",
     changed_by: adminId,
     old_data: existing,
-    new_data: { ...existing, ...fields, instructor_payout },
+    new_data: { ...existing, ...fields, price, instructor_payout },
   });
 
   revalidatePath("/admin");

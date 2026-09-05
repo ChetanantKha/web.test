@@ -27,6 +27,7 @@ export type Session = {
   session_date: string;
   start_time: string;
   end_time: string;
+  course_type: string;
   price: number;
   instructor_payout: number;
   finished_by: string | null;

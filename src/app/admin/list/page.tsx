@@ -9,7 +9,7 @@ import { formatThaiDate } from "@/lib/date";
 export default async function ListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ instructor?: string; from?: string; to?: string }>;
+  searchParams: Promise<{ instructor?: string; from?: string; to?: string; student?: string }>;
 }) {
   const supabase = await createClient();
   const {
@@ -21,13 +21,15 @@ export default async function ListPage({
   const { data: me } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   if (me?.role !== "admin") redirect("/staff");
 
-  const { instructor, from, to } = await searchParams;
+  const { instructor, from, to, student } = await searchParams;
 
-  const { data: instructors } = await supabase
-    .from("profiles")
-    .select("id, full_name")
-    .eq("role", "instructor")
-    .order("full_name");
+  const [{ data: instructors }, { data: allStudentNames }] = await Promise.all([
+    supabase.from("profiles").select("id, full_name").eq("role", "instructor").order("full_name"),
+    supabase.from("sessions").select("student_name").not("student_name", "is", null),
+  ]);
+  const studentNameOptions = [
+    ...new Set((allStudentNames ?? []).map((s) => s.student_name).filter(Boolean)),
+  ] as string[];
 
   // no date range by default: show every scheduled class, past or future, until the admin filters
   let query = supabase
@@ -39,6 +41,7 @@ export default async function ListPage({
   if (from) query = query.gte("session_date", from);
   if (to) query = query.lte("session_date", to);
   if (instructor) query = query.eq("instructor_id", instructor);
+  if (student) query = query.ilike("student_name", `%${student}%`);
 
   const { data: sessions } = await query;
   const list = (sessions ?? []) as Session[];
@@ -81,6 +84,22 @@ export default async function ListPage({
               </option>
             ))}
           </select>
+        </div>
+        <div className="space-y-1">
+          <label className="block">ผู้เรียน</label>
+          <input
+            type="text"
+            name="student"
+            list="student-name-options"
+            defaultValue={student ?? ""}
+            placeholder="ค้นหาชื่อผู้เรียน"
+            className="rounded-lg border border-gray-300 px-2 py-1.5"
+          />
+          <datalist id="student-name-options">
+            {studentNameOptions.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
         </div>
         <div className="space-y-1">
           <label className="block">จากวันที่</label>

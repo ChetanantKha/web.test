@@ -19,20 +19,24 @@ export default async function CalendarDayPage({ params }: { params: Promise<{ da
 
   const { date } = await params;
 
-  const [{ data: settings }, { data: instructors }, { data: sessions }] = await Promise.all([
-    supabase.from("settings").select("*").eq("id", 1).single(),
-    supabase
-      .from("profiles")
-      .select("id, full_name")
-      .eq("role", "instructor")
-      .eq("is_active", true)
-      .order("full_name"),
-    supabase
-      .from("sessions")
-      .select("*, profiles!instructor_id(full_name)")
-      .eq("session_date", date)
-      .order("start_time"),
-  ]);
+  const [{ data: settings }, { data: instructors }, { data: sessions }, { data: allStudentNames }] =
+    await Promise.all([
+      supabase.from("settings").select("*").eq("id", 1).single(),
+      supabase
+        .from("profiles")
+        .select("id, full_name")
+        .eq("role", "instructor")
+        .eq("is_active", true)
+        .order("full_name"),
+      supabase
+        .from("sessions")
+        .select("*, profiles!instructor_id(full_name)")
+        .eq("session_date", date)
+        .order("start_time"),
+      supabase.from("sessions").select("student_name").not("student_name", "is", null),
+    ]);
+
+  const studentNames = [...new Set((allStudentNames ?? []).map((s) => s.student_name).filter(Boolean))] as string[];
 
   const slotTimes = buildSlotTimes(
     settings?.business_start?.slice(0, 5) ?? "06:00",
@@ -55,6 +59,7 @@ export default async function CalendarDayPage({ params }: { params: Promise<{ da
         slotMinutes={settings?.slot_minutes ?? 60}
         sessions={(sessions ?? []) as Session[]}
         instructors={instructors ?? []}
+        studentNames={studentNames}
       />
     </div>
   );

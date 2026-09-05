@@ -13,12 +13,14 @@ export default function DayView({
   slotMinutes,
   sessions,
   instructors,
+  studentNames,
 }: {
   date: string;
   slotTimes: string[];
   slotMinutes: number;
   sessions: Session[];
   instructors: Instructor[];
+  studentNames: string[];
 }) {
   const [editing, setEditing] = useState<Session | null>(null);
   const [prefillStart, setPrefillStart] = useState<string | null>(null);
@@ -72,6 +74,7 @@ export default function DayView({
           key={editing?.id ?? prefillStart ?? "new"}
           date={date}
           instructors={instructors}
+          studentNames={studentNames}
           slotMinutes={slotMinutes}
           editing={editing}
           prefillStart={prefillStart}
