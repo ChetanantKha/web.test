@@ -7,7 +7,7 @@ export const FIXED_COURSE_TYPES: Record<Exclude<CourseType, "custom">, {
 }> = {
   hourly: { label: "รายชั่วโมง", price: 500, payout: 400 },
   ten_session: { label: "คอร์ส 10 ครั้ง (470/คาบ)", price: 470, payout: 400 },
-  slalom: { label: "Slalom/Slide", price: 800, payout: 650 },
+  slalom: { label: "Slalom/Slide", price: 800, payout: 600 },
   slalom_10: { label: "Slalom/Slide คอร์ส 10 ครั้ง (800/คาบ)", price: 800, payout: 600 },
 };
 
