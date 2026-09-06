@@ -137,7 +137,7 @@ create table sessions (
   session_date date not null,
   start_time time not null,
   end_time time not null,
-  course_type text check (course_type in ('hourly', 'ten_session', 'slalom', 'custom')) not null default 'custom',
+  course_type text check (course_type in ('hourly', 'ten_session', 'slalom', 'slalom_10', 'custom')) not null default 'custom',
   price numeric not null default 0,
   instructor_payout numeric not null default 0, -- fixed per course_type, or computed from profiles.rate_type/rate_value when course_type = 'custom'
   finished_by uuid references profiles(id),
