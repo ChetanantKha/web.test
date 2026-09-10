@@ -503,3 +503,16 @@ export async function updatePackage(packageId: string, formData: FormData) {
 
   revalidatePath("/admin/packages");
 }
+
+/** Sessions already linked to this package just lose the link (package_id -> null,
+ *  set by the FK's "on delete set null") — their price/payout/history stays intact. */
+export async function deletePackage(packageId: string) {
+  const { supabase } = await requireAdmin();
+
+  const { error } = await supabase.from("course_packages").delete().eq("id", packageId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/admin/packages");
+  revalidatePath("/admin");
+  revalidatePath("/admin/list");
+}

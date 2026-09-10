@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { updatePackage } from "@/app/admin/actions";
+import { deletePackage, updatePackage } from "@/app/admin/actions";
 import { COURSE_TYPE_LABEL } from "@/lib/courseTypes";
 import type { CoursePackage } from "@/lib/types";
 
@@ -133,13 +133,34 @@ export default function PackageRow({ pkg, instructors }: { pkg: CoursePackage; i
 
           {error && <p className="text-red-600 sm:col-span-2">{error}</p>}
 
-          <button
-            type="submit"
-            disabled={pending}
-            className="rounded-lg bg-gradient-to-r from-orange-500 to-red-600 px-4 py-2 font-medium text-white disabled:opacity-50 sm:col-span-2"
-          >
-            {pending ? "กำลังบันทึก..." : "บันทึก"}
-          </button>
+          <div className="flex gap-2 sm:col-span-2">
+            <button
+              type="submit"
+              disabled={pending}
+              className="rounded-lg bg-gradient-to-r from-orange-500 to-red-600 px-4 py-2 font-medium text-white disabled:opacity-50"
+            >
+              {pending ? "กำลังบันทึก..." : "บันทึก"}
+            </button>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => {
+                if (!confirm(`ยืนยันลบคอร์สของ "${pkg.student_name}"? คาบที่ผูกไว้จะไม่ถูกลบ แค่เลิกผูก`)) return;
+                setError(null);
+                startTransition(async () => {
+                  try {
+                    await deletePackage(pkg.id);
+                    router.refresh();
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : "เกิดข้อผิดพลาด");
+                  }
+                });
+              }}
+              className="rounded-lg border border-red-200 px-4 py-2 text-red-600 hover:bg-red-50 disabled:opacity-50"
+            >
+              ลบคอร์สนี้
+            </button>
+          </div>
         </form>
       )}
     </div>
