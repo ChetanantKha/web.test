@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import DayView from "@/components/DayView";
 import { buildSlotTimes } from "@/lib/slots";
 import { formatThaiDate } from "@/lib/date";
-import type { Session } from "@/lib/types";
+import type { CoursePackage, Session } from "@/lib/types";
 
 export default async function CalendarDayPage({ params }: { params: Promise<{ date: string }> }) {
   const supabase = await createClient();
@@ -19,7 +19,7 @@ export default async function CalendarDayPage({ params }: { params: Promise<{ da
 
   const { date } = await params;
 
-  const [{ data: settings }, { data: instructors }, { data: sessions }, { data: allStudentNames }] =
+  const [{ data: settings }, { data: instructors }, { data: sessions }, { data: allStudentNames }, { data: packages }] =
     await Promise.all([
       supabase.from("settings").select("*").eq("id", 1).single(),
       supabase
@@ -34,6 +34,7 @@ export default async function CalendarDayPage({ params }: { params: Promise<{ da
         .eq("session_date", date)
         .order("start_time"),
       supabase.from("sessions").select("student_name").not("student_name", "is", null),
+      supabase.from("course_packages").select("*").eq("status", "active"),
     ]);
 
   const studentNames = [...new Set((allStudentNames ?? []).map((s) => s.student_name).filter(Boolean))] as string[];
@@ -60,6 +61,7 @@ export default async function CalendarDayPage({ params }: { params: Promise<{ da
         sessions={(sessions ?? []) as Session[]}
         instructors={instructors ?? []}
         studentNames={studentNames}
+        packages={(packages ?? []) as CoursePackage[]}
       />
     </div>
   );

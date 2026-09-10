@@ -3,8 +3,8 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createSchedule, createBulkSchedule, updateSchedule, deleteSchedule } from "@/app/admin/actions";
-import { COURSE_TYPE_LABEL, type CourseType } from "@/lib/courseTypes";
-import type { Session } from "@/lib/types";
+import { COURSE_TYPE_LABEL, isPackageCourseType, type CourseType } from "@/lib/courseTypes";
+import type { CoursePackage, Session } from "@/lib/types";
 
 type Instructor = { id: string; full_name: string };
 
@@ -12,6 +12,7 @@ export default function ScheduleForm({
   date,
   instructors,
   studentNames,
+  packages,
   slotMinutes,
   editing,
   prefillStart,
@@ -20,6 +21,7 @@ export default function ScheduleForm({
   date: string;
   instructors: Instructor[];
   studentNames: string[];
+  packages: CoursePackage[];
   slotMinutes: number;
   editing: Session | null;
   prefillStart: string | null;
@@ -35,6 +37,18 @@ export default function ScheduleForm({
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [courseType, setCourseType] = useState<CourseType>((editing?.course_type as CourseType) ?? "hourly");
   const [bulkCourseTypes, setBulkCourseTypes] = useState<Record<string, CourseType>>({});
+  const [selectedInstructorId, setSelectedInstructorId] = useState(editing?.instructor_id ?? "");
+  const [studentNameValue, setStudentNameValue] = useState(editing?.student_name ?? "");
+
+  const matchedPackage =
+    !editing && !bulkMode && isPackageCourseType(courseType) && studentNameValue.trim() && selectedInstructorId
+      ? packages.find(
+          (p) =>
+            p.instructor_id === selectedInstructorId &&
+            p.course_type === courseType &&
+            p.student_name.trim().toLowerCase() === studentNameValue.trim().toLowerCase(),
+        )
+      : undefined;
 
   function defaultEndTime(start: string) {
     if (!start) return "";
@@ -82,6 +96,8 @@ export default function ScheduleForm({
               formRef.current?.reset();
               setStartTime("");
               setCourseType("hourly");
+              setSelectedInstructorId("");
+              setStudentNameValue("");
             }
             router.refresh();
           } catch (e) {
@@ -155,6 +171,7 @@ export default function ScheduleForm({
                 name="instructor_id"
                 required
                 defaultValue={editing?.instructor_id ?? ""}
+                onChange={(e) => setSelectedInstructorId(e.target.value)}
                 className={inputClass}
               >
                 <option value="" disabled>
@@ -174,6 +191,7 @@ export default function ScheduleForm({
                 name="student_name"
                 list="student-name-options"
                 defaultValue={editing?.student_name ?? ""}
+                onChange={(e) => setStudentNameValue(e.target.value)}
                 className={inputClass}
                 placeholder="พิมพ์ชื่อ (คั่นด้วย , ถ้ามีหลายคน)"
               />
@@ -194,6 +212,18 @@ export default function ScheduleForm({
                 ))}
               </select>
             </div>
+
+            {matchedPackage && (
+              <p
+                className={`text-xs sm:col-span-2 ${
+                  matchedPackage.used_sessions >= matchedPackage.total_sessions ? "text-red-600" : "text-orange-700"
+                }`}
+              >
+                {matchedPackage.used_sessions >= matchedPackage.total_sessions
+                  ? `คอร์สนี้ใช้ครบ ${matchedPackage.total_sessions} ครั้งแล้ว จะไม่หักจากคอร์ส`
+                  : `จะหักจากคอร์สที่ซื้อไว้ (เหลือ ${matchedPackage.total_sessions - matchedPackage.used_sessions}/${matchedPackage.total_sessions} ครั้ง)`}
+              </p>
+            )}
 
             {courseType === "custom" && (
               <div className="space-y-1">

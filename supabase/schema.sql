@@ -7,6 +7,7 @@ drop trigger if exists on_auth_user_created on auth.users;
 drop function if exists handle_new_user();
 drop table if exists audit_log cascade;
 drop table if exists sessions cascade;
+drop table if exists course_packages cascade;
 drop table if exists locations cascade;
 drop table if exists sports cascade;
 drop table if exists settings cascade;
@@ -126,6 +127,38 @@ create policy "settings: admin manages" on settings for all using (is_admin()) w
 insert into settings (id) values (1) on conflict (id) do nothing;
 
 -- ============================================================
+-- course_packages: a student's purchased multi-session course (e.g. a
+-- 10-session package), tied to one instructor. used_sessions auto-increments
+-- as matching sessions are scheduled/cancelled, but admin can always edit it
+-- directly (needed since the app launched mid-course for some students).
+-- ============================================================
+create table course_packages (
+  id uuid primary key default gen_random_uuid(),
+  student_name text not null,
+  instructor_id uuid not null references profiles(id),
+  course_type text not null check (course_type in ('ten_session', 'slalom_10')),
+  total_sessions int not null default 10,
+  used_sessions int not null default 0,
+  status text not null default 'active' check (status in ('active', 'completed', 'cancelled')),
+  notes text,
+  created_by uuid references profiles(id),
+  created_at timestamptz not null default now()
+);
+
+create index course_packages_instructor_idx on course_packages (instructor_id);
+
+alter table course_packages enable row level security;
+
+create policy "course_packages: instructor reads own, admin reads all"
+  on course_packages for select
+  using (instructor_id = auth.uid() or is_admin());
+
+create policy "course_packages: admin manages"
+  on course_packages for all
+  using (is_admin())
+  with check (is_admin());
+
+-- ============================================================
 -- sessions: one row = one scheduled class, assigned by the admin.
 -- status is derived (not stored): scheduled -> teaching -> finished -> paid,
 -- based on session_date/start_time/end_time vs finished_at/paid_at.
@@ -140,6 +173,7 @@ create table sessions (
   course_type text check (course_type in ('hourly', 'ten_session', 'slalom', 'slalom_10', 'custom')) not null default 'custom',
   price numeric not null default 0,
   instructor_payout numeric not null default 0, -- fixed per course_type, or computed from profiles.rate_type/rate_value when course_type = 'custom'
+  package_id uuid references course_packages(id) on delete set null,
   finished_by uuid references profiles(id),
   finished_at timestamptz,
   paid_by uuid references profiles(id),

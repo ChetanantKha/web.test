@@ -30,10 +30,24 @@ export type Session = {
   course_type: string;
   price: number;
   instructor_payout: number;
+  package_id: string | null;
   finished_by: string | null;
   finished_at: string | null;
   paid_by: string | null;
   paid_at: string | null;
+  created_at: string;
+  profiles?: { full_name: string } | null;
+};
+
+export type CoursePackage = {
+  id: string;
+  student_name: string;
+  instructor_id: string;
+  course_type: string;
+  total_sessions: number;
+  used_sessions: number;
+  status: "active" | "completed" | "cancelled";
+  notes: string | null;
   created_at: string;
   profiles?: { full_name: string } | null;
 };

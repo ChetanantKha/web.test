@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { computePayout } from "@/lib/payout";
-import { FIXED_COURSE_TYPES, isFixedCourseType } from "@/lib/courseTypes";
+import { FIXED_COURSE_TYPES, isFixedCourseType, isPackageCourseType } from "@/lib/courseTypes";
 
 async function requireAdmin() {
   const supabase = await createClient();
@@ -133,6 +133,53 @@ function resolvePricing(
   return { price: customPrice, instructor_payout: computePayout(rateType, rateValue, customPrice) };
 }
 
+/** Finds the student's active package for this instructor/course_type with sessions
+ *  left, and bumps its used_sessions by 1. Returns the package id to store on the
+ *  new session, or null if there's no matching package (session is just billed alone). */
+async function linkToPackage(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  instructorId: string,
+  studentName: string | null,
+  courseType: string,
+): Promise<string | null> {
+  if (!studentName?.trim() || !isPackageCourseType(courseType)) return null;
+
+  const { data: candidates } = await supabase
+    .from("course_packages")
+    .select("id, used_sessions, total_sessions")
+    .eq("instructor_id", instructorId)
+    .eq("course_type", courseType)
+    .eq("status", "active")
+    .ilike("student_name", studentName.trim());
+
+  const match = (candidates ?? []).find((p) => p.used_sessions < p.total_sessions);
+  if (!match) return null;
+
+  await supabase
+    .from("course_packages")
+    .update({ used_sessions: match.used_sessions + 1 })
+    .eq("id", match.id);
+
+  return match.id;
+}
+
+/** Undoes linkToPackage's count when a linked session is cancelled. */
+async function unlinkFromPackage(supabase: Awaited<ReturnType<typeof createClient>>, packageId: string | null) {
+  if (!packageId) return;
+
+  const { data: pkg } = await supabase
+    .from("course_packages")
+    .select("used_sessions")
+    .eq("id", packageId)
+    .single();
+  if (!pkg) return;
+
+  await supabase
+    .from("course_packages")
+    .update({ used_sessions: Math.max(0, pkg.used_sessions - 1) })
+    .eq("id", packageId);
+}
+
 export async function createSchedule(formData: FormData) {
   const { supabase, adminId } = await requireAdmin();
   const { custom_price, ...fields } = readScheduleFields(formData);
@@ -155,13 +202,16 @@ export async function createSchedule(formData: FormData) {
     instructor.rate_value,
   );
 
+  const package_id = await linkToPackage(supabase, fields.instructor_id, fields.student_name, fields.course_type);
+
   const { error } = await supabase
     .from("sessions")
-    .insert({ ...fields, price, instructor_payout, created_by: adminId });
+    .insert({ ...fields, price, instructor_payout, package_id, created_by: adminId });
   if (error) throw new Error(error.message);
 
   revalidatePath("/admin");
   revalidatePath("/admin/list");
+  revalidatePath("/admin/packages");
 }
 
 export type BulkScheduleResult = {
@@ -206,6 +256,8 @@ export async function createBulkSchedule(formData: FormData): Promise<BulkSchedu
         instructor.rate_value,
       );
 
+      const package_id = await linkToPackage(supabase, instructorId, student_name, course_type);
+
       const { error } = await supabase.from("sessions").insert({
         instructor_id: instructorId,
         student_name,
@@ -215,6 +267,7 @@ export async function createBulkSchedule(formData: FormData): Promise<BulkSchedu
         course_type,
         price,
         instructor_payout,
+        package_id,
         created_by: adminId,
       });
       if (error) throw new Error(error.message);
@@ -227,6 +280,7 @@ export async function createBulkSchedule(formData: FormData): Promise<BulkSchedu
 
   revalidatePath("/admin");
   revalidatePath("/admin/list");
+  revalidatePath("/admin/packages");
   return result;
 }
 
@@ -289,6 +343,8 @@ export async function deleteSchedule(sessionId: string) {
   const { error } = await supabase.from("sessions").delete().eq("id", sessionId);
   if (error) throw new Error(error.message);
 
+  await unlinkFromPackage(supabase, existing.package_id);
+
   await supabase.from("audit_log").insert({
     session_id: sessionId,
     action: "delete",
@@ -299,6 +355,7 @@ export async function deleteSchedule(sessionId: string) {
 
   revalidatePath("/admin");
   revalidatePath("/admin/list");
+  revalidatePath("/admin/packages");
 }
 
 // ============================================================
@@ -388,4 +445,61 @@ export async function approveAllForInstructor(instructorId: string) {
     await approvePayment(row.id);
   }
   void adminId;
+}
+
+// ============================================================
+// student course packages
+// ============================================================
+export async function createPackage(formData: FormData) {
+  const { supabase, adminId } = await requireAdmin();
+
+  const student_name = String(formData.get("student_name") || "").trim();
+  const instructor_id = String(formData.get("instructor_id") || "");
+  const course_type = String(formData.get("course_type") || "");
+  const total_sessions = Number(formData.get("total_sessions") || 10);
+  const used_sessions = Number(formData.get("used_sessions") || 0);
+  const notes = String(formData.get("notes") || "").trim() || null;
+
+  if (!student_name) throw new Error("กรุณากรอกชื่อผู้เรียน");
+  if (!instructor_id) throw new Error("กรุณาเลือกผู้สอน");
+  if (!isPackageCourseType(course_type)) throw new Error("ประเภทคอร์สไม่ถูกต้อง");
+  if (total_sessions <= 0) throw new Error("จำนวนครั้งทั้งหมดต้องมากกว่า 0");
+  if (used_sessions < 0) throw new Error("จำนวนครั้งที่ใช้ไปแล้วต้องไม่ติดลบ");
+
+  const { error } = await supabase.from("course_packages").insert({
+    student_name,
+    instructor_id,
+    course_type,
+    total_sessions,
+    used_sessions,
+    notes,
+    created_by: adminId,
+  });
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/admin/packages");
+}
+
+export async function updatePackage(packageId: string, formData: FormData) {
+  const { supabase } = await requireAdmin();
+
+  const student_name = String(formData.get("student_name") || "").trim();
+  const instructor_id = String(formData.get("instructor_id") || "");
+  const total_sessions = Number(formData.get("total_sessions") || 10);
+  const used_sessions = Number(formData.get("used_sessions") || 0);
+  const status = String(formData.get("status") || "active");
+  const notes = String(formData.get("notes") || "").trim() || null;
+
+  if (!student_name) throw new Error("กรุณากรอกชื่อผู้เรียน");
+  if (!instructor_id) throw new Error("กรุณาเลือกผู้สอน");
+  if (total_sessions <= 0) throw new Error("จำนวนครั้งทั้งหมดต้องมากกว่า 0");
+  if (used_sessions < 0) throw new Error("จำนวนครั้งที่ใช้ไปแล้วต้องไม่ติดลบ");
+
+  const { error } = await supabase
+    .from("course_packages")
+    .update({ student_name, instructor_id, total_sessions, used_sessions, status, notes })
+    .eq("id", packageId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/admin/packages");
 }

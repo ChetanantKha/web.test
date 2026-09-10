@@ -22,3 +22,15 @@ export const COURSE_TYPE_LABEL: Record<CourseType, string> = {
 export function isFixedCourseType(courseType: string): courseType is Exclude<CourseType, "custom"> {
   return courseType === "hourly" || courseType === "ten_session" || courseType === "slalom" || courseType === "slalom_10";
 }
+
+/** Course types sold as a multi-session package that course_packages tracks usage for. */
+export type PackageCourseType = "ten_session" | "slalom_10";
+
+export function isPackageCourseType(courseType: string): courseType is PackageCourseType {
+  return courseType === "ten_session" || courseType === "slalom_10";
+}
+
+export const PACKAGE_COURSE_TYPE_LABEL: Record<PackageCourseType, string> = {
+  ten_session: FIXED_COURSE_TYPES.ten_session.label,
+  slalom_10: FIXED_COURSE_TYPES.slalom_10.label,
+};

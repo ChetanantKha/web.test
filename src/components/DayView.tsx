@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import ScheduleForm from "@/components/ScheduleForm";
 import StatusBadge from "@/components/StatusBadge";
-import type { Session } from "@/lib/types";
+import type { CoursePackage, Session } from "@/lib/types";
 
 type Instructor = { id: string; full_name: string };
 
@@ -14,6 +14,7 @@ export default function DayView({
   sessions,
   instructors,
   studentNames,
+  packages,
 }: {
   date: string;
   slotTimes: string[];
@@ -21,6 +22,7 @@ export default function DayView({
   sessions: Session[];
   instructors: Instructor[];
   studentNames: string[];
+  packages: CoursePackage[];
 }) {
   const [editing, setEditing] = useState<Session | null>(null);
   const [prefillStart, setPrefillStart] = useState<string | null>(null);
@@ -75,6 +77,7 @@ export default function DayView({
           date={date}
           instructors={instructors}
           studentNames={studentNames}
+          packages={packages}
           slotMinutes={slotMinutes}
           editing={editing}
           prefillStart={prefillStart}
