@@ -3,7 +3,8 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createSchedule, createBulkSchedule, updateSchedule, deleteSchedule } from "@/app/admin/actions";
-import { COURSE_TYPE_LABEL, isPackageCourseType, type CourseType } from "@/lib/courseTypes";
+import { COURSE_TYPE_LABEL, FIXED_COURSE_TYPES, isFixedCourseType, isPackageCourseType, type CourseType } from "@/lib/courseTypes";
+import { durationHours } from "@/lib/slots";
 import type { CoursePackage, Session } from "@/lib/types";
 
 type Instructor = { id: string; full_name: string };
@@ -33,6 +34,7 @@ export default function ScheduleForm({
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [startTime, setStartTime] = useState(editing?.start_time.slice(0, 5) ?? prefillStart ?? "");
+  const [endTimeValue, setEndTimeValue] = useState(editing?.end_time.slice(0, 5) ?? defaultEndTime(startTime));
   const [bulkMode, setBulkMode] = useState(false);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [courseType, setCourseType] = useState<CourseType>((editing?.course_type as CourseType) ?? "hourly");
@@ -49,6 +51,16 @@ export default function ScheduleForm({
             p.student_name.trim().toLowerCase() === studentNameValue.trim().toLowerCase(),
         )
       : undefined;
+
+  const previewHours =
+    startTime && endTimeValue ? Math.round(durationHours(startTime, endTimeValue) * 100) / 100 : 0;
+  const pricePreview =
+    !bulkMode && isFixedCourseType(courseType) && previewHours > 0
+      ? {
+          price: Math.round(FIXED_COURSE_TYPES[courseType].price * previewHours * 100) / 100,
+          payout: Math.round(FIXED_COURSE_TYPES[courseType].payout * previewHours * 100) / 100,
+        }
+      : null;
 
   function defaultEndTime(start: string) {
     if (!start) return "";
@@ -95,6 +107,7 @@ export default function ScheduleForm({
               await createSchedule(formData);
               formRef.current?.reset();
               setStartTime("");
+              setEndTimeValue("");
               setCourseType("hourly");
               setSelectedInstructorId("");
               setStudentNameValue("");
@@ -141,14 +154,29 @@ export default function ScheduleForm({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1">
           <label className="block text-sm font-medium">เวลาเริ่ม</label>
-          <input
-            type="time"
-            name="start_time"
-            required
-            value={startTime}
-            onChange={(e) => setStartTime(e.target.value)}
-            className={inputClass}
-          />
+          {editing ? (
+            <input
+              type="time"
+              name="start_time"
+              required
+              defaultValue={editing.start_time.slice(0, 5)}
+              onChange={(e) => setStartTime(e.target.value)}
+              className={inputClass}
+            />
+          ) : (
+            <input
+              type="time"
+              name="start_time"
+              required
+              value={startTime}
+              onChange={(e) => {
+                const v = e.target.value;
+                setStartTime(v);
+                setEndTimeValue(defaultEndTime(v));
+              }}
+              className={inputClass}
+            />
+          )}
         </div>
 
         <div className="space-y-1">
@@ -159,6 +187,7 @@ export default function ScheduleForm({
             required
             defaultValue={editing?.end_time.slice(0, 5) ?? defaultEndTime(startTime)}
             key={editing?.id ?? startTime}
+            onChange={(e) => setEndTimeValue(e.target.value)}
             className={inputClass}
           />
         </div>
@@ -212,6 +241,13 @@ export default function ScheduleForm({
                 ))}
               </select>
             </div>
+
+            {pricePreview && (
+              <p className="text-xs text-gray-500 sm:col-span-2">
+                {previewHours} ชม. → ราคา {pricePreview.price.toLocaleString()} บาท · จ่ายผู้สอน{" "}
+                {pricePreview.payout.toLocaleString()} บาท
+              </p>
+            )}
 
             {matchedPackage && (
               <p

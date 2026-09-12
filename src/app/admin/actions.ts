@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { computePayout } from "@/lib/payout";
+import { durationHours } from "@/lib/slots";
 import { FIXED_COURSE_TYPES, isFixedCourseType, isPackageCourseType } from "@/lib/courseTypes";
 
 async function requireAdmin() {
@@ -118,17 +119,24 @@ function readScheduleFields(formData: FormData) {
   };
 }
 
-/** Fixed course types always pay the same amount regardless of instructor; "custom" falls
- *  back to that instructor's own rate_type/rate_value (the pre-fixed-pricing behavior). */
+function roundMoney(amount: number): number {
+  return Math.round(amount * 100) / 100;
+}
+
+/** Fixed course types store a per-hour rate, scaled by the class's actual duration (so
+ *  extending/shortening a class in the schedule form recalculates price/payout). Always
+ *  pays the same rate regardless of instructor. "custom" falls back to that instructor's
+ *  own rate_type/rate_value and is entered as a flat total, not scaled by duration. */
 function resolvePricing(
   courseType: string,
   customPrice: number,
   rateType: "fixed" | "percent",
   rateValue: number,
+  hours: number,
 ) {
   if (isFixedCourseType(courseType)) {
     const { price, payout } = FIXED_COURSE_TYPES[courseType];
-    return { price, instructor_payout: payout };
+    return { price: roundMoney(price * hours), instructor_payout: roundMoney(payout * hours) };
   }
   return { price: customPrice, instructor_payout: computePayout(rateType, rateValue, customPrice) };
 }
@@ -200,6 +208,7 @@ export async function createSchedule(formData: FormData) {
     custom_price,
     instructor.rate_type,
     instructor.rate_value,
+    durationHours(fields.start_time, fields.end_time),
   );
 
   const package_id = await linkToPackage(supabase, fields.instructor_id, fields.student_name, fields.course_type);
@@ -254,6 +263,7 @@ export async function createBulkSchedule(formData: FormData): Promise<BulkSchedu
         custom_price,
         instructor.rate_type,
         instructor.rate_value,
+        durationHours(start_time, end_time),
       );
 
       const package_id = await linkToPackage(supabase, instructorId, student_name, course_type);
@@ -314,6 +324,7 @@ export async function updateSchedule(sessionId: string, formData: FormData) {
     custom_price,
     instructor.rate_type,
     instructor.rate_value,
+    durationHours(fields.start_time, fields.end_time),
   );
 
   const { error } = await supabase

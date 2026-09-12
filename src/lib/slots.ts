@@ -13,6 +13,13 @@ export function buildSlotTimes(start: string, end: string, slotMinutes: number):
   return slots;
 }
 
+/** Hours between two "HH:MM" times, allowing fractional hours (e.g. 30 min -> 0.5). */
+export function durationHours(startTime: string, endTime: string): number {
+  const [sh, sm] = startTime.split(":").map(Number);
+  const [eh, em] = endTime.split(":").map(Number);
+  return (eh * 60 + em - (sh * 60 + sm)) / 60;
+}
+
 export function addMinutes(time: string, minutes: number): string {
   const [h, m] = time.split(":").map(Number);
   const total = h * 60 + m + minutes;
