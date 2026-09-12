@@ -14,14 +14,27 @@ const STATUS_LABEL: Record<CoursePackage["status"], string> = {
   cancelled: "ยกเลิก",
 };
 
-export default function PackageRow({ pkg, instructors }: { pkg: CoursePackage; instructors: Instructor[] }) {
+export default function PackageRow({
+  pkg,
+  instructors,
+  orphanCount = 0,
+}: {
+  pkg: CoursePackage;
+  instructors: Instructor[];
+  /** Sessions matching this package (same instructor/course type/student) that were
+   *  scheduled before the package existed and so never bumped used_sessions — counted
+   *  here on top of it so the displayed total reflects reality without touching the
+   *  editable used_sessions column itself. */
+  orphanCount?: number;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [useLegacyPricing, setUseLegacyPricing] = useState(pkg.legacy_price != null);
 
-  const remaining = pkg.total_sessions - pkg.used_sessions;
+  const effectiveUsed = pkg.used_sessions + orphanCount;
+  const remaining = pkg.total_sessions - effectiveUsed;
   const isLow = pkg.status === "active" && remaining <= 2 && remaining > 0;
   const isFull = pkg.status === "active" && remaining <= 0;
 
@@ -39,8 +52,11 @@ export default function PackageRow({ pkg, instructors }: { pkg: CoursePackage; i
                 isFull ? "font-medium text-red-600" : isLow ? "font-medium text-orange-600" : undefined
               }
             >
-              {pkg.used_sessions}/{pkg.total_sessions} ครั้ง
-            </span>{" "}
+              {effectiveUsed}/{pkg.total_sessions} ครั้ง
+            </span>
+            {orphanCount > 0 && (
+              <span className="text-gray-400"> (รวมคาบเก่าก่อนสร้างคอร์ส {orphanCount} ครั้ง)</span>
+            )}{" "}
             · {STATUS_LABEL[pkg.status]}
             {pkg.legacy_price != null && (
               <span className="font-medium text-blue-600"> · ราคาเก่า ({pkg.legacy_price}/{pkg.legacy_payout})</span>
