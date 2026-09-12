@@ -194,12 +194,39 @@ export default function ScheduleForm({
 
         {!bulkMode && (
           <>
+            {!editing && packages.length > 0 && (
+              <div className="space-y-1 sm:col-span-2">
+                <label className="block text-sm font-medium">เลือกจากคอร์สที่ซื้อไว้ (ไม่บังคับ)</label>
+                <select
+                  defaultValue=""
+                  onChange={(e) => {
+                    const pkg = packages.find((p) => p.id === e.target.value);
+                    if (!pkg) return;
+                    setSelectedInstructorId(pkg.instructor_id);
+                    setStudentNameValue(pkg.student_name);
+                    setCourseType(pkg.course_type as CourseType);
+                  }}
+                  className={inputClass}
+                >
+                  <option value="">-- เลือกคอร์ส --</option>
+                  {packages
+                    .filter((p) => p.status === "active" && p.used_sessions < p.total_sessions)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.student_name} — {instructors.find((i) => i.id === p.instructor_id)?.full_name ?? "-"} (
+                        {p.used_sessions}/{p.total_sessions})
+                      </option>
+                    ))}
+                </select>
+              </div>
+            )}
+
             <div className="space-y-1">
               <label className="block text-sm font-medium">ผู้สอน</label>
               <select
                 name="instructor_id"
                 required
-                defaultValue={editing?.instructor_id ?? ""}
+                value={selectedInstructorId}
                 onChange={(e) => setSelectedInstructorId(e.target.value)}
                 className={inputClass}
               >
@@ -219,7 +246,7 @@ export default function ScheduleForm({
               <input
                 name="student_name"
                 list="student-name-options"
-                defaultValue={editing?.student_name ?? ""}
+                value={studentNameValue ?? ""}
                 onChange={(e) => setStudentNameValue(e.target.value)}
                 className={inputClass}
                 placeholder="พิมพ์ชื่อ (คั่นด้วย , ถ้ามีหลายคน)"
