@@ -1,9 +1,19 @@
-import { Resend } from "resend";
+import nodemailer, { type Transporter } from "nodemailer";
 
-let resendClient: Resend | null = null;
-function getResend(): Resend {
-  if (!resendClient) resendClient = new Resend(process.env.RESEND_API_KEY!);
-  return resendClient;
+let transporter: Transporter | null = null;
+function getTransporter(): Transporter {
+  if (!transporter) {
+    transporter = nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
+      auth: {
+        user: process.env.GMAIL_USER!,
+        pass: process.env.GMAIL_APP_PASSWORD!,
+      },
+    });
+  }
+  return transporter;
 }
 
 export type FinishReminderEmailInput = {
@@ -100,11 +110,11 @@ function renderFinishReminderHtml(input: FinishReminderEmailInput): string {
 }
 
 export async function sendFinishReminderEmail(input: FinishReminderEmailInput) {
-  const from = process.env.RESEND_FROM_EMAIL;
-  if (!from) throw new Error("RESEND_FROM_EMAIL is not set");
+  const from = process.env.GMAIL_USER;
+  if (!from) throw new Error("GMAIL_USER is not set");
 
-  await getResend().emails.send({
-    from,
+  await getTransporter().sendMail({
+    from: `T-STAR Academy <${from}>`,
     to: input.to,
     subject: `ยืนยันการสอน — ${input.sessionDateThai} ${input.startTime.slice(0, 5)} น.`,
     html: renderFinishReminderHtml(input),
