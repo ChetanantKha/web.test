@@ -26,6 +26,7 @@ create table profiles (
   full_name text not null,
   nicknames text[] not null default '{}', -- same account can log in under several nicknames
   email text,
+  notify_email text, -- where "class finished?" reminder emails are sent; set by admin, separate from the auth email above
   phone text,
   rate_type text check (rate_type in ('fixed', 'percent')) default 'percent',
   rate_value numeric not null default 0,
@@ -187,6 +188,7 @@ create table sessions (
   package_id uuid references course_packages(id) on delete set null,
   finished_by uuid references profiles(id),
   finished_at timestamptz,
+  finish_email_sent_at timestamptz, -- set once the "did you finish teaching?" reminder email has gone out, so the cron job doesn't resend it
   paid_by uuid references profiles(id),
   paid_at timestamptz,
   created_by uuid references profiles(id),

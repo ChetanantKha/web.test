@@ -26,6 +26,9 @@ export default function InstructorRow({ profile }: { profile: Profile }) {
             ชื่อเล่นล็อกอิน: {profile.nicknames.length > 0 ? profile.nicknames.join(", ") : "ยังไม่ตั้ง"} · อัตรา{" "}
             {profile.rate_type === "fixed" ? `${profile.rate_value} บาท/รอบ` : `${profile.rate_value}%`}
           </p>
+          <p className={profile.notify_email ? "text-gray-500" : "text-amber-600"}>
+            อีเมลแจ้งเตือน: {profile.notify_email ?? "ยังไม่ตั้ง — จะไม่ได้รับอีเมลยืนยันการสอน"}
+          </p>
         </div>
         <button onClick={() => setOpen((o) => !o)} className="rounded-lg border border-gray-300 px-3 py-1.5">
           {open ? "ปิด" : "แก้ไข"}
@@ -63,6 +66,16 @@ export default function InstructorRow({ profile }: { profile: Profile }) {
               name="nicknames"
               defaultValue={profile.nicknames.join(", ")}
               placeholder="เช่น พีนัท, peanut, พี่นัท"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="block font-medium">อีเมลสำหรับแจ้งเตือน (ยืนยันการสอนเสร็จ)</label>
+            <input
+              name="notify_email"
+              type="email"
+              defaultValue={profile.notify_email ?? ""}
+              placeholder="เช่น instructor@example.com"
               className="w-full rounded-lg border border-gray-300 px-3 py-2"
             />
           </div>

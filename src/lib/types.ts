@@ -3,6 +3,7 @@ export type Profile = {
   role: "admin" | "instructor";
   full_name: string;
   nicknames: string[];
+  notify_email: string | null;
   phone: string | null;
   rate_type: "fixed" | "percent";
   rate_value: number;

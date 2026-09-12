@@ -46,6 +46,7 @@ export async function updateInstructorProfile(instructorId: string, formData: Fo
     .update({
       full_name: String(formData.get("full_name") || ""),
       nicknames,
+      notify_email: String(formData.get("notify_email") || "").trim() || null,
       phone: String(formData.get("phone") || "") || null,
       rate_type: String(formData.get("rate_type") || "percent"),
       rate_value: Number(formData.get("rate_value") || 0),
