@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import StatusBadge from "@/components/StatusBadge";
 import ExportCsvButton from "@/components/ExportCsvButton";
 import CancelSessionButton from "@/components/CancelSessionButton";
+import SubstituteInstructorButton from "@/components/SubstituteInstructorButton";
 import { getSessionStatus, statusLabel, type Session } from "@/lib/types";
 import { formatThaiDate } from "@/lib/date";
 
@@ -151,8 +152,14 @@ export default async function ListPage({
                   {s.instructor_payout.toLocaleString()} บาท
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <StatusBadge session={s} />
+                <SubstituteInstructorButton
+                  sessionId={s.id}
+                  currentInstructorId={s.instructor_id}
+                  currentInstructorName={s.profiles?.full_name ?? "-"}
+                  instructors={instructors ?? []}
+                />
                 <CancelSessionButton sessionId={s.id} />
               </div>
             </div>

@@ -19,6 +19,7 @@ export default function PackageRow({ pkg, instructors }: { pkg: CoursePackage; i
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [useLegacyPricing, setUseLegacyPricing] = useState(pkg.legacy_price != null);
 
   const remaining = pkg.total_sessions - pkg.used_sessions;
   const isLow = pkg.status === "active" && remaining <= 2 && remaining > 0;
@@ -41,6 +42,9 @@ export default function PackageRow({ pkg, instructors }: { pkg: CoursePackage; i
               {pkg.used_sessions}/{pkg.total_sessions} ครั้ง
             </span>{" "}
             · {STATUS_LABEL[pkg.status]}
+            {pkg.legacy_price != null && (
+              <span className="font-medium text-blue-600"> · ราคาเก่า ({pkg.legacy_price}/{pkg.legacy_payout})</span>
+            )}
           </p>
           {pkg.notes && <p className="text-gray-400">{pkg.notes}</p>}
         </div>
@@ -130,6 +134,45 @@ export default function PackageRow({ pkg, instructors }: { pkg: CoursePackage; i
               className="w-full rounded-lg border border-gray-300 px-3 py-2"
             />
           </div>
+
+          <label className="flex items-center gap-2 sm:col-span-2">
+            <input
+              type="checkbox"
+              name="use_legacy_pricing"
+              checked={useLegacyPricing}
+              onChange={(e) => setUseLegacyPricing(e.target.checked)}
+            />
+            ล็อกราคาเดิม (ไม่ปรับตามเรทใหม่ในอนาคต)
+          </label>
+
+          {useLegacyPricing && (
+            <>
+              <div className="space-y-1">
+                <label className="block font-medium">ราคาที่ล็อกไว้ (บาท/คาบ)</label>
+                <input
+                  type="number"
+                  name="legacy_price"
+                  min={0}
+                  step="0.01"
+                  required={useLegacyPricing}
+                  defaultValue={pkg.legacy_price ?? ""}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="block font-medium">จ่ายผู้สอนที่ล็อกไว้ (บาท/คาบ)</label>
+                <input
+                  type="number"
+                  name="legacy_payout"
+                  min={0}
+                  step="0.01"
+                  required={useLegacyPricing}
+                  defaultValue={pkg.legacy_payout ?? ""}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2"
+                />
+              </div>
+            </>
+          )}
 
           {error && <p className="text-red-600 sm:col-span-2">{error}</p>}
 

@@ -136,11 +136,15 @@ create table course_packages (
   id uuid primary key default gen_random_uuid(),
   student_name text not null,
   instructor_id uuid not null references profiles(id),
-  course_type text not null check (course_type in ('ten_session', 'slalom_10')),
+  course_type text not null check (course_type in (
+    'ten_session', 'slalom_10', 'nanny_10', 'basic_slide_10', 'basic_slalom_10', 'skate_dance_10'
+  )),
   total_sessions int not null default 10,
   used_sessions int not null default 0,
   status text not null default 'active' check (status in ('active', 'completed', 'cancelled')),
   notes text,
+  legacy_price numeric, -- locks this student+instructor to a flat rate even after FIXED_COURSE_TYPES pricing changes
+  legacy_payout numeric,
   created_by uuid references profiles(id),
   created_at timestamptz not null default now()
 );
@@ -170,7 +174,14 @@ create table sessions (
   session_date date not null,
   start_time time not null,
   end_time time not null,
-  course_type text check (course_type in ('hourly', 'ten_session', 'slalom', 'slalom_10', 'custom')) not null default 'custom',
+  course_type text check (course_type in (
+    'hourly', 'ten_session', 'slalom', 'slalom_10',
+    'nanny', 'nanny_10',
+    'basic_slide', 'basic_slide_10',
+    'basic_slalom', 'basic_slalom_10',
+    'skate_dance', 'skate_dance_10',
+    'custom'
+  )) not null default 'custom',
   price numeric not null default 0,
   instructor_payout numeric not null default 0, -- fixed per course_type, or computed from profiles.rate_type/rate_value when course_type = 'custom'
   package_id uuid references course_packages(id) on delete set null,
@@ -225,7 +236,7 @@ end $$;
 create table audit_log (
   id uuid primary key default gen_random_uuid(),
   session_id uuid,
-  action text not null check (action in ('create', 'update', 'delete', 'finish', 'pay')),
+  action text not null check (action in ('create', 'update', 'delete', 'finish', 'pay', 'substitute')),
   changed_by uuid references profiles(id),
   old_data jsonb,
   new_data jsonb,

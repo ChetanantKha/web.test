@@ -48,6 +48,8 @@ export type CoursePackage = {
   used_sessions: number;
   status: "active" | "completed" | "cancelled";
   notes: string | null;
+  legacy_price: number | null;
+  legacy_payout: number | null;
   created_at: string;
   profiles?: { full_name: string } | null;
 };

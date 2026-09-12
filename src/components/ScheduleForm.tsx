@@ -3,7 +3,14 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createSchedule, createBulkSchedule, updateSchedule, deleteSchedule } from "@/app/admin/actions";
-import { COURSE_TYPE_LABEL, FIXED_COURSE_TYPES, isFixedCourseType, isPackageCourseType, type CourseType } from "@/lib/courseTypes";
+import {
+  COURSE_TYPE_LABEL,
+  FIXED_COURSE_TYPES,
+  isDurationScaled,
+  isFixedCourseType,
+  isPackageCourseType,
+  type CourseType,
+} from "@/lib/courseTypes";
 import { durationHours } from "@/lib/slots";
 import type { CoursePackage, Session } from "@/lib/types";
 
@@ -33,11 +40,11 @@ export default function ScheduleForm({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [courseType, setCourseType] = useState<CourseType>((editing?.course_type as CourseType) ?? "hourly");
   const [startTime, setStartTime] = useState(editing?.start_time.slice(0, 5) ?? prefillStart ?? "");
   const [endTimeValue, setEndTimeValue] = useState(editing?.end_time.slice(0, 5) ?? defaultEndTime(startTime));
   const [bulkMode, setBulkMode] = useState(false);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
-  const [courseType, setCourseType] = useState<CourseType>((editing?.course_type as CourseType) ?? "hourly");
   const [bulkCourseTypes, setBulkCourseTypes] = useState<Record<string, CourseType>>({});
   const [selectedInstructorId, setSelectedInstructorId] = useState(editing?.instructor_id ?? "");
   const [studentNameValue, setStudentNameValue] = useState(editing?.student_name ?? "");
@@ -54,15 +61,17 @@ export default function ScheduleForm({
 
   const previewHours =
     startTime && endTimeValue ? Math.round(durationHours(startTime, endTimeValue) * 100) / 100 : 0;
-  const pricePreview =
-    !bulkMode && isFixedCourseType(courseType) && previewHours > 0
-      ? {
-          price: Math.round(FIXED_COURSE_TYPES[courseType].price * previewHours * 100) / 100,
-          payout: Math.round(FIXED_COURSE_TYPES[courseType].payout * previewHours * 100) / 100,
-        }
-      : null;
+  const pricePreview = (() => {
+    if (bulkMode || !isFixedCourseType(courseType)) return null;
+    const scaled = isDurationScaled(courseType);
+    if (scaled && previewHours <= 0) return null;
+    const factor = scaled ? previewHours : 1;
+    const { price, payout } = FIXED_COURSE_TYPES[courseType];
+    return { scaled, price: Math.round(price * factor * 100) / 100, payout: Math.round(payout * factor * 100) / 100 };
+  })();
 
-  function defaultEndTime(start: string) {
+  function defaultEndTime(start: string, type: CourseType = courseType) {
+    if (type === "skate_dance" || type === "skate_dance_10") return "16:30";
     if (!start) return "";
     const [h, m] = start.split(":").map(Number);
     const total = h * 60 + m + slotMinutes;
@@ -205,6 +214,10 @@ export default function ScheduleForm({
                     setSelectedInstructorId(pkg.instructor_id);
                     setStudentNameValue(pkg.student_name);
                     setCourseType(pkg.course_type as CourseType);
+                    if (pkg.course_type === "skate_dance" || pkg.course_type === "skate_dance_10") {
+                      setStartTime("15:00");
+                      setEndTimeValue("16:30");
+                    }
                   }}
                   className={inputClass}
                 >
@@ -258,7 +271,14 @@ export default function ScheduleForm({
               <select
                 name="course_type"
                 value={courseType}
-                onChange={(e) => setCourseType(e.target.value as CourseType)}
+                onChange={(e) => {
+                  const v = e.target.value as CourseType;
+                  setCourseType(v);
+                  if (!editing && (v === "skate_dance" || v === "skate_dance_10")) {
+                    setStartTime("15:00");
+                    setEndTimeValue("16:30");
+                  }
+                }}
                 className={inputClass}
               >
                 {Object.entries(COURSE_TYPE_LABEL).map(([value, label]) => (
@@ -267,12 +287,15 @@ export default function ScheduleForm({
                   </option>
                 ))}
               </select>
+              {(courseType === "skate_dance" || courseType === "skate_dance_10") && (
+                <p className="text-xs text-gray-500">คาบตายตัว เสาร์ 15:00-16:30 (90 นาที) แก้เวลาเองได้ถ้าจำเป็น</p>
+              )}
             </div>
 
             {pricePreview && (
               <p className="text-xs text-gray-500 sm:col-span-2">
-                {previewHours} ชม. → ราคา {pricePreview.price.toLocaleString()} บาท · จ่ายผู้สอน{" "}
-                {pricePreview.payout.toLocaleString()} บาท
+                {pricePreview.scaled ? `${previewHours} ชม. → ` : "ราคาคงที่ · "}
+                ราคา {pricePreview.price.toLocaleString()} บาท · จ่ายผู้สอน {pricePreview.payout.toLocaleString()} บาท
               </p>
             )}
 

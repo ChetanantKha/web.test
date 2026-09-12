@@ -17,6 +17,7 @@ export default function PackageForm({
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [useLegacyPricing, setUseLegacyPricing] = useState(false);
 
   return (
     <form
@@ -27,6 +28,7 @@ export default function PackageForm({
             await createPackage(formData);
             router.refresh();
             (document.getElementById("package-form") as HTMLFormElement | null)?.reset();
+            setUseLegacyPricing(false);
           } catch (e) {
             setError(e instanceof Error ? e.message : "เกิดข้อผิดพลาด");
           }
@@ -96,6 +98,29 @@ export default function PackageForm({
           <label className="block text-sm font-medium">หมายเหตุ (ถ้ามี)</label>
           <input name="notes" className={inputClass} />
         </div>
+
+        <label className="flex items-center gap-2 text-sm sm:col-span-2">
+          <input
+            type="checkbox"
+            name="use_legacy_pricing"
+            checked={useLegacyPricing}
+            onChange={(e) => setUseLegacyPricing(e.target.checked)}
+          />
+          ล็อกราคาเดิม (ไม่ปรับตามเรทใหม่ในอนาคต)
+        </label>
+
+        {useLegacyPricing && (
+          <>
+            <div className="space-y-1">
+              <label className="block text-sm font-medium">ราคาที่ล็อกไว้ (บาท/คาบ)</label>
+              <input type="number" name="legacy_price" min={0} step="0.01" required={useLegacyPricing} className={inputClass} />
+            </div>
+            <div className="space-y-1">
+              <label className="block text-sm font-medium">จ่ายผู้สอนที่ล็อกไว้ (บาท/คาบ)</label>
+              <input type="number" name="legacy_payout" min={0} step="0.01" required={useLegacyPricing} className={inputClass} />
+            </div>
+          </>
+        )}
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { computePayout } from "@/lib/payout";
 import { durationHours } from "@/lib/slots";
-import { FIXED_COURSE_TYPES, isFixedCourseType, isPackageCourseType } from "@/lib/courseTypes";
+import { FIXED_COURSE_TYPES, isDurationScaled, isFixedCourseType, isPackageCourseType } from "@/lib/courseTypes";
 
 async function requireAdmin() {
   const supabase = await createClient();
@@ -124,9 +124,11 @@ function roundMoney(amount: number): number {
 }
 
 /** Fixed course types store a per-hour rate, scaled by the class's actual duration (so
- *  extending/shortening a class in the schedule form recalculates price/payout). Always
- *  pays the same rate regardless of instructor. "custom" falls back to that instructor's
- *  own rate_type/rate_value and is entered as a flat total, not scaled by duration. */
+ *  extending/shortening a class in the schedule form recalculates price/payout) — except
+ *  types marked non-scaled (e.g. skate dance's fixed 90-minute slot), which always charge
+ *  the flat amount regardless of duration. Always pays the same rate regardless of
+ *  instructor. "custom" falls back to that instructor's own rate_type/rate_value and is
+ *  entered as a flat total, not scaled by duration. */
 function resolvePricing(
   courseType: string,
   customPrice: number,
@@ -136,25 +138,29 @@ function resolvePricing(
 ) {
   if (isFixedCourseType(courseType)) {
     const { price, payout } = FIXED_COURSE_TYPES[courseType];
-    return { price: roundMoney(price * hours), instructor_payout: roundMoney(payout * hours) };
+    const factor = isDurationScaled(courseType) ? hours : 1;
+    return { price: roundMoney(price * factor), instructor_payout: roundMoney(payout * factor) };
   }
   return { price: customPrice, instructor_payout: computePayout(rateType, rateValue, customPrice) };
 }
 
+type PackageMatch = { id: string; legacyPrice: number | null; legacyPayout: number | null };
+
 /** Finds the student's active package for this instructor/course_type with sessions
- *  left, and bumps its used_sessions by 1. Returns the package id to store on the
- *  new session, or null if there's no matching package (session is just billed alone). */
+ *  left, and bumps its used_sessions by 1. Returns the package (with any locked-in legacy
+ *  price/payout) to store on the new session, or null if there's no matching package
+ *  (session is just billed alone at the current rate). */
 async function linkToPackage(
   supabase: Awaited<ReturnType<typeof createClient>>,
   instructorId: string,
   studentName: string | null,
   courseType: string,
-): Promise<string | null> {
+): Promise<PackageMatch | null> {
   if (!studentName?.trim() || !isPackageCourseType(courseType)) return null;
 
   const { data: candidates } = await supabase
     .from("course_packages")
-    .select("id, used_sessions, total_sessions")
+    .select("id, used_sessions, total_sessions, legacy_price, legacy_payout")
     .eq("instructor_id", instructorId)
     .eq("course_type", courseType)
     .eq("status", "active")
@@ -168,7 +174,7 @@ async function linkToPackage(
     .update({ used_sessions: match.used_sessions + 1 })
     .eq("id", match.id);
 
-  return match.id;
+  return { id: match.id, legacyPrice: match.legacy_price, legacyPayout: match.legacy_payout };
 }
 
 /** Undoes linkToPackage's count when a linked session is cancelled. */
@@ -203,19 +209,22 @@ export async function createSchedule(formData: FormData) {
     .single();
   if (!instructor) throw new Error("ไม่พบผู้สอน");
 
-  const { price, instructor_payout } = resolvePricing(
-    fields.course_type,
-    custom_price,
-    instructor.rate_type,
-    instructor.rate_value,
-    durationHours(fields.start_time, fields.end_time),
-  );
+  const pkg = await linkToPackage(supabase, fields.instructor_id, fields.student_name, fields.course_type);
 
-  const package_id = await linkToPackage(supabase, fields.instructor_id, fields.student_name, fields.course_type);
+  const { price, instructor_payout } =
+    pkg?.legacyPrice != null
+      ? { price: pkg.legacyPrice, instructor_payout: pkg.legacyPayout ?? 0 }
+      : resolvePricing(
+          fields.course_type,
+          custom_price,
+          instructor.rate_type,
+          instructor.rate_value,
+          durationHours(fields.start_time, fields.end_time),
+        );
 
   const { error } = await supabase
     .from("sessions")
-    .insert({ ...fields, price, instructor_payout, package_id, created_by: adminId });
+    .insert({ ...fields, price, instructor_payout, package_id: pkg?.id ?? null, created_by: adminId });
   if (error) throw new Error(error.message);
 
   revalidatePath("/admin");
@@ -258,15 +267,19 @@ export async function createBulkSchedule(formData: FormData): Promise<BulkSchedu
       const student_name = String(formData.get(`student_name__${instructorId}`) || "") || null;
       const course_type = String(formData.get(`course_type__${instructorId}`) || "custom");
       const custom_price = Number(formData.get(`price__${instructorId}`) || 0);
-      const { price, instructor_payout } = resolvePricing(
-        course_type,
-        custom_price,
-        instructor.rate_type,
-        instructor.rate_value,
-        durationHours(start_time, end_time),
-      );
 
-      const package_id = await linkToPackage(supabase, instructorId, student_name, course_type);
+      const pkg = await linkToPackage(supabase, instructorId, student_name, course_type);
+
+      const { price, instructor_payout } =
+        pkg?.legacyPrice != null
+          ? { price: pkg.legacyPrice, instructor_payout: pkg.legacyPayout ?? 0 }
+          : resolvePricing(
+              course_type,
+              custom_price,
+              instructor.rate_type,
+              instructor.rate_value,
+              durationHours(start_time, end_time),
+            );
 
       const { error } = await supabase.from("sessions").insert({
         instructor_id: instructorId,
@@ -277,7 +290,7 @@ export async function createBulkSchedule(formData: FormData): Promise<BulkSchedu
         course_type,
         price,
         instructor_payout,
-        package_id,
+        package_id: pkg?.id ?? null,
         created_by: adminId,
       });
       if (error) throw new Error(error.message);
@@ -367,6 +380,58 @@ export async function deleteSchedule(sessionId: string) {
   revalidatePath("/admin");
   revalidatePath("/admin/list");
   revalidatePath("/admin/packages");
+}
+
+/** Reassigns a class to a substitute instructor (e.g. the original can't make it) —
+ *  the class fully becomes the substitute's from here on (their schedule, their payout),
+ *  with the original instructor kept only in audit_log for history. For "custom"
+ *  course_type, payout is recomputed off the substitute's own rate_type/rate_value;
+ *  fixed course types pay the same regardless of who teaches. Can be done any time,
+ *  before or after the class. */
+export async function substituteInstructor(sessionId: string, newInstructorId: string) {
+  const { supabase, adminId } = await requireAdmin();
+
+  const { data: existing } = await supabase.from("sessions").select("*").eq("id", sessionId).single();
+  if (!existing) throw new Error("ไม่พบรายการ");
+  if (existing.instructor_id === newInstructorId) throw new Error("ผู้สอนคนนี้สอนอยู่แล้ว");
+
+  await assertNoOverlap(
+    supabase,
+    newInstructorId,
+    existing.session_date,
+    existing.start_time,
+    existing.end_time,
+    sessionId,
+  );
+
+  const { data: newInstructor } = await supabase
+    .from("profiles")
+    .select("rate_type, rate_value")
+    .eq("id", newInstructorId)
+    .single();
+  if (!newInstructor) throw new Error("ไม่พบผู้สอน");
+
+  const update: Record<string, unknown> = {
+    instructor_id: newInstructorId,
+    updated_at: new Date().toISOString(),
+  };
+  if (!isFixedCourseType(existing.course_type)) {
+    update.instructor_payout = computePayout(newInstructor.rate_type, newInstructor.rate_value, existing.price);
+  }
+
+  const { error } = await supabase.from("sessions").update(update).eq("id", sessionId);
+  if (error) throw new Error(error.message);
+
+  await supabase.from("audit_log").insert({
+    session_id: sessionId,
+    action: "substitute",
+    changed_by: adminId,
+    old_data: existing,
+    new_data: { ...existing, ...update },
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/admin/list");
 }
 
 // ============================================================
@@ -470,6 +535,9 @@ export async function createPackage(formData: FormData) {
   const total_sessions = Number(formData.get("total_sessions") || 10);
   const used_sessions = Number(formData.get("used_sessions") || 0);
   const notes = String(formData.get("notes") || "").trim() || null;
+  const useLegacyPricing = formData.get("use_legacy_pricing") === "on";
+  const legacy_price = useLegacyPricing ? Number(formData.get("legacy_price") || 0) : null;
+  const legacy_payout = useLegacyPricing ? Number(formData.get("legacy_payout") || 0) : null;
 
   if (!student_name) throw new Error("กรุณากรอกชื่อผู้เรียน");
   if (!instructor_id) throw new Error("กรุณาเลือกผู้สอน");
@@ -484,6 +552,8 @@ export async function createPackage(formData: FormData) {
     total_sessions,
     used_sessions,
     notes,
+    legacy_price,
+    legacy_payout,
     created_by: adminId,
   });
   if (error) throw new Error(error.message);
@@ -500,6 +570,9 @@ export async function updatePackage(packageId: string, formData: FormData) {
   const used_sessions = Number(formData.get("used_sessions") || 0);
   const status = String(formData.get("status") || "active");
   const notes = String(formData.get("notes") || "").trim() || null;
+  const useLegacyPricing = formData.get("use_legacy_pricing") === "on";
+  const legacy_price = useLegacyPricing ? Number(formData.get("legacy_price") || 0) : null;
+  const legacy_payout = useLegacyPricing ? Number(formData.get("legacy_payout") || 0) : null;
 
   if (!student_name) throw new Error("กรุณากรอกชื่อผู้เรียน");
   if (!instructor_id) throw new Error("กรุณาเลือกผู้สอน");
@@ -508,7 +581,16 @@ export async function updatePackage(packageId: string, formData: FormData) {
 
   const { error } = await supabase
     .from("course_packages")
-    .update({ student_name, instructor_id, total_sessions, used_sessions, status, notes })
+    .update({
+      student_name,
+      instructor_id,
+      total_sessions,
+      used_sessions,
+      status,
+      notes,
+      legacy_price,
+      legacy_payout,
+    })
     .eq("id", packageId);
   if (error) throw new Error(error.message);
 

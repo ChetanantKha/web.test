@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import StatusBadge from "@/components/StatusBadge";
 import AdminConfirmFinishedButton from "@/components/AdminConfirmFinishedButton";
 import CancelSessionButton from "@/components/CancelSessionButton";
+import SubstituteInstructorButton from "@/components/SubstituteInstructorButton";
 import { getSessionStatus, type Session } from "@/lib/types";
 import { todayLocalISO, formatThaiDate } from "@/lib/date";
 
@@ -20,11 +21,14 @@ export default async function AdminPage() {
 
   const today = todayLocalISO();
 
-  const { data: sessions } = await supabase
-    .from("sessions")
-    .select("*, profiles!instructor_id(full_name)")
-    .eq("session_date", today)
-    .order("start_time", { ascending: true });
+  const [{ data: sessions }, { data: instructors }] = await Promise.all([
+    supabase
+      .from("sessions")
+      .select("*, profiles!instructor_id(full_name)")
+      .eq("session_date", today)
+      .order("start_time", { ascending: true }),
+    supabase.from("profiles").select("id, full_name").eq("role", "instructor").eq("is_active", true).order("full_name"),
+  ]);
 
   const list = (sessions ?? []) as Session[];
 
@@ -61,9 +65,15 @@ export default async function AdminPage() {
                     {s.instructor_payout.toLocaleString()} บาท
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <StatusBadge session={s} />
                   {status === "teaching" && <AdminConfirmFinishedButton sessionId={s.id} />}
+                  <SubstituteInstructorButton
+                    sessionId={s.id}
+                    currentInstructorId={s.instructor_id}
+                    currentInstructorName={s.profiles?.full_name ?? "-"}
+                    instructors={instructors ?? []}
+                  />
                   <CancelSessionButton sessionId={s.id} />
                 </div>
               </div>
