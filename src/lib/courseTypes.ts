@@ -34,8 +34,8 @@ export const FIXED_COURSE_TYPES: Record<Exclude<CourseType, "custom">, FixedCour
   basic_slide_10: { label: "Basic Slide 10 ครั้ง (700/คาบ)", price: 700, payout: 400 },
   basic_slalom: { label: "Basic Slalom", price: 800, payout: 500 },
   basic_slalom_10: { label: "Basic Slalom 10 ครั้ง (800/คาบ)", price: 800, payout: 450 },
-  skate_dance: { label: "Skate Dance (เสาร์ 15:00-16:30)", price: 800, payout: 650, scaled: false },
-  skate_dance_10: { label: "Skate Dance 10 ครั้ง (800/คาบ)", price: 800, payout: 650, scaled: false },
+  skate_dance: { label: "Skate Dance (เสาร์ 15:00-16:30)", price: 850, payout: 550, scaled: false },
+  skate_dance_10: { label: "Skate Dance 10 ครั้ง (850/คาบ)", price: 850, payout: 550, scaled: false },
 };
 
 export const COURSE_TYPE_LABEL: Record<CourseType, string> = {
