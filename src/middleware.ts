@@ -28,6 +28,10 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const isLoginPage = request.nextUrl.pathname === "/login";
+  const isPublicRoute =
+    request.nextUrl.pathname.startsWith("/api/cron/") ||
+    request.nextUrl.pathname.startsWith("/confirm-finished/");
+  if (isPublicRoute) return response;
 
   if (!user && !isLoginPage) {
     const url = request.nextUrl.clone();
