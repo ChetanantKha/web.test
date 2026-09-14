@@ -16,13 +16,13 @@ export default function LoginPage() {
     setError(null);
 
     startTransition(async () => {
-      try {
-        await loginWithNickname(nickname);
-        router.replace("/");
-        router.refresh();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "เข้าสู่ระบบไม่สำเร็จ");
+      const result = await loginWithNickname(nickname);
+      if (result?.error) {
+        setError(result.error);
+        return;
       }
+      router.replace("/");
+      router.refresh();
     });
   }
 
