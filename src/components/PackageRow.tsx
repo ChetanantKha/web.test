@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { deletePackage, updatePackage } from "@/app/admin/actions";
+import ErrorAlert from "@/components/ErrorAlert";
 import { COURSE_TYPE_LABEL } from "@/lib/courseTypes";
 import type { CoursePackage } from "@/lib/types";
 
@@ -64,7 +65,10 @@ export default function PackageRow({
           </p>
           {pkg.notes && <p className="text-gray-400">{pkg.notes}</p>}
         </div>
-        <button onClick={() => setOpen((o) => !o)} className="rounded-lg border border-gray-300 px-3 py-1.5">
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="active:scale-95 transition-transform duration-100 rounded-lg border border-gray-300 px-3 py-1.5"
+        >
           {open ? "ปิด" : "แก้ไข"}
         </button>
       </div>
@@ -74,13 +78,13 @@ export default function PackageRow({
           action={(formData) => {
             setError(null);
             startTransition(async () => {
-              try {
-                await updatePackage(pkg.id, formData);
-                setOpen(false);
-                router.refresh();
-              } catch (e) {
-                setError(e instanceof Error ? e.message : "เกิดข้อผิดพลาด");
+              const result = await updatePackage(pkg.id, formData);
+              if (result?.error) {
+                setError(result.error);
+                return;
               }
+              setOpen(false);
+              router.refresh();
             });
           }}
           className="mt-4 grid grid-cols-1 gap-3 border-t border-gray-100 pt-4 sm:grid-cols-2"
@@ -190,13 +194,17 @@ export default function PackageRow({
             </>
           )}
 
-          {error && <p className="text-red-600 sm:col-span-2">{error}</p>}
+          {error && (
+            <div className="sm:col-span-2">
+              <ErrorAlert message={error} />
+            </div>
+          )}
 
           <div className="flex gap-2 sm:col-span-2">
             <button
               type="submit"
               disabled={pending}
-              className="rounded-lg bg-gradient-to-r from-orange-500 to-red-600 px-4 py-2 font-medium text-white disabled:opacity-50"
+              className="active:scale-95 transition-transform duration-100 rounded-lg bg-gradient-to-r from-orange-500 to-red-600 px-4 py-2 font-medium text-white disabled:opacity-50"
             >
               {pending ? "กำลังบันทึก..." : "บันทึก"}
             </button>
@@ -207,15 +215,15 @@ export default function PackageRow({
                 if (!confirm(`ยืนยันลบคอร์สของ "${pkg.student_name}"? คาบที่ผูกไว้จะไม่ถูกลบ แค่เลิกผูก`)) return;
                 setError(null);
                 startTransition(async () => {
-                  try {
-                    await deletePackage(pkg.id);
-                    router.refresh();
-                  } catch (e) {
-                    setError(e instanceof Error ? e.message : "เกิดข้อผิดพลาด");
+                  const result = await deletePackage(pkg.id);
+                  if (result?.error) {
+                    setError(result.error);
+                    return;
                   }
+                  router.refresh();
                 });
               }}
-              className="rounded-lg border border-red-200 px-4 py-2 text-red-600 hover:bg-red-50 disabled:opacity-50"
+              className="active:scale-95 transition-transform duration-100 rounded-lg border border-red-200 px-4 py-2 text-red-600 hover:bg-red-50 disabled:opacity-50"
             >
               ลบคอร์สนี้
             </button>

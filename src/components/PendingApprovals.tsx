@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { adminConfirmAllTeaching, approveAllForInstructor, approvePayment } from "@/app/admin/actions";
+import ErrorAlert from "@/components/ErrorAlert";
 import { formatThaiDate, todayLocalISO } from "@/lib/date";
 import { getSessionStatus, statusLabel, type Session } from "@/lib/types";
 
@@ -76,26 +77,26 @@ export default function PendingApprovals() {
   async function handleApprove(id: string) {
     setError(null);
     startTransition(async () => {
-      try {
-        await approvePayment(id);
-        await load();
-        router.refresh();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "เกิดข้อผิดพลาด");
+      const result = await approvePayment(id);
+      if (result?.error) {
+        setError(result.error);
+        return;
       }
+      await load();
+      router.refresh();
     });
   }
 
   async function handleApproveAll(instructorId: string) {
     setError(null);
     startTransition(async () => {
-      try {
-        await approveAllForInstructor(instructorId);
-        await load();
-        router.refresh();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "เกิดข้อผิดพลาด");
+      const result = await approveAllForInstructor(instructorId);
+      if (result?.error) {
+        setError(result.error);
+        return;
       }
+      await load();
+      router.refresh();
     });
   }
 
@@ -103,13 +104,13 @@ export default function PendingApprovals() {
     setError(null);
     if (!confirm("ยืนยันแทนผู้สอนทุกคนที่ยังไม่กดว่าสอนเสร็จแล้ว?")) return;
     startTransition(async () => {
-      try {
-        await adminConfirmAllTeaching();
-        await load();
-        router.refresh();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "เกิดข้อผิดพลาด");
+      const result = await adminConfirmAllTeaching();
+      if (result?.error) {
+        setError(result.error);
+        return;
       }
+      await load();
+      router.refresh();
     });
   }
 
@@ -147,7 +148,7 @@ export default function PendingApprovals() {
       {items.length > 0 && (
         <button
           onClick={() => setOpen(true)}
-          className="fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full bg-amber-500 px-4 py-3 text-sm font-medium text-white shadow-lg hover:bg-amber-600"
+          className="active:scale-95 transition-transform duration-100 fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full bg-amber-500 px-4 py-3 text-sm font-medium text-white shadow-lg hover:bg-amber-600"
         >
           รออนุมัติจ่ายเงิน
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-amber-600">
@@ -161,7 +162,10 @@ export default function PendingApprovals() {
           <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-5 shadow-xl">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="font-semibold">รออนุมัติจ่ายเงิน</h2>
-              <button onClick={() => setOpen(false)} className="text-sm text-gray-500 hover:underline">
+              <button
+                onClick={() => setOpen(false)}
+                className="active:scale-95 transition-transform duration-100 text-sm text-gray-500 hover:underline"
+              >
                 ปิด
               </button>
             </div>
@@ -185,13 +189,17 @@ export default function PendingApprovals() {
               <button
                 disabled={pending}
                 onClick={handleConfirmAllTeaching}
-                className="mb-3 w-full rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                className="active:scale-95 transition-transform duration-100 mb-3 w-full rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
               >
                 ยืนยันแทนทั้งหมด ({statusCounts.teaching} รายการที่ยังไม่กดเสร็จ)
               </button>
             )}
 
-            {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
+            {error && (
+              <div className="mb-2">
+                <ErrorAlert message={error} />
+              </div>
+            )}
 
             <div className="space-y-4">
               {items.length === 0 && (
@@ -221,7 +229,7 @@ export default function PendingApprovals() {
                   <button
                     disabled={pending}
                     onClick={() => handleApproveAll(group.instructorId)}
-                    className="mt-2 w-full rounded-lg bg-gradient-to-r from-orange-500 to-red-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                    className="active:scale-95 transition-transform duration-100 mt-2 w-full rounded-lg bg-gradient-to-r from-orange-500 to-red-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
                   >
                     อนุมัติทั้งหมด ({group.total.toLocaleString()} บาท)
                   </button>
@@ -236,7 +244,7 @@ export default function PendingApprovals() {
                         <button
                           disabled={pending}
                           onClick={() => handleApprove(item.id)}
-                          className="whitespace-nowrap rounded border border-gray-300 px-2 py-0.5 hover:bg-gray-50 disabled:opacity-50"
+                          className="active:scale-95 transition-transform duration-100 whitespace-nowrap rounded border border-gray-300 px-2 py-0.5 hover:bg-gray-50 disabled:opacity-50"
                         >
                           อนุมัติรายการนี้
                         </button>

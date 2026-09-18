@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createPackage } from "@/app/admin/actions";
+import ErrorAlert from "@/components/ErrorAlert";
 import { PACKAGE_COURSE_TYPE_LABEL, type PackageCourseType } from "@/lib/courseTypes";
 
 type Instructor = { id: string; full_name: string };
@@ -24,14 +25,14 @@ export default function PackageForm({
       action={(formData) => {
         setError(null);
         startTransition(async () => {
-          try {
-            await createPackage(formData);
-            router.refresh();
-            (document.getElementById("package-form") as HTMLFormElement | null)?.reset();
-            setUseLegacyPricing(false);
-          } catch (e) {
-            setError(e instanceof Error ? e.message : "เกิดข้อผิดพลาด");
+          const result = await createPackage(formData);
+          if (result?.error) {
+            setError(result.error);
+            return;
           }
+          router.refresh();
+          (document.getElementById("package-form") as HTMLFormElement | null)?.reset();
+          setUseLegacyPricing(false);
         });
       }}
       id="package-form"
@@ -123,12 +124,12 @@ export default function PackageForm({
         )}
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <ErrorAlert message={error} />}
 
       <button
         type="submit"
         disabled={pending}
-        className="rounded-lg bg-gradient-to-r from-orange-500 to-red-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+        className="active:scale-95 transition-transform duration-100 rounded-lg bg-gradient-to-r from-orange-500 to-red-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
       >
         {pending ? "กำลังบันทึก..." : "เพิ่มคอร์ส"}
       </button>

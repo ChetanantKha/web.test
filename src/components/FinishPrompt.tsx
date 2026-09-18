@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { confirmFinished } from "@/app/staff/actions";
 import { formatThaiDate } from "@/lib/date";
+import ErrorAlert from "@/components/ErrorAlert";
 
 type DueSession = {
   id: string;
@@ -18,6 +19,7 @@ export default function FinishPrompt({ instructorId }: { instructorId: string })
   const router = useRouter();
   const [due, setDue] = useState<DueSession | null>(null);
   const [snoozed, setSnoozed] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const check = useCallback(async () => {
@@ -56,7 +58,7 @@ export default function FinishPrompt({ instructorId }: { instructorId: string })
       <button
         onClick={() => setSnoozed((prev) => { const next = new Set(prev); next.delete(due.id); return next; })}
         title="มีคลาสรอยืนยันว่าสอนเสร็จแล้ว กดเพื่อยืนยัน"
-        className="fixed right-4 top-4 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-amber-500 text-white shadow-lg hover:bg-amber-600"
+        className="active:scale-95 transition-transform duration-100 fixed right-4 top-4 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-amber-500 text-white shadow-lg hover:bg-amber-600"
       >
         !
       </button>
@@ -72,23 +74,29 @@ export default function FinishPrompt({ instructorId }: { instructorId: string })
           {due.end_time.slice(0, 5)}{" "}
           {due.student_name ? `(${due.student_name}) ` : ""}เสร็จแล้วหรือยัง?
         </p>
+        {error && <ErrorAlert message={error} />}
         <div className="flex gap-2">
           <button
             disabled={pending}
-            onClick={() =>
+            onClick={() => {
+              setError(null);
               startTransition(async () => {
-                await confirmFinished(due.id);
+                const result = await confirmFinished(due.id);
+                if (result?.error) {
+                  setError(result.error);
+                  return;
+                }
                 setDue(null);
                 router.refresh();
-              })
-            }
-            className="rounded-lg bg-gradient-to-r from-orange-500 to-red-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              });
+            }}
+            className="active:scale-95 transition-transform duration-100 rounded-lg bg-gradient-to-r from-orange-500 to-red-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
           >
             เสร็จแล้ว
           </button>
           <button
             onClick={() => setSnoozed((prev) => new Set(prev).add(due.id))}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm"
+            className="active:scale-95 transition-transform duration-100 rounded-lg border border-gray-300 px-4 py-2 text-sm"
           >
             ยังไม่เสร็จ / เตือนภายหลัง
           </button>

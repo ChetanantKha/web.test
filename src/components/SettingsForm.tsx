@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { updateSettings } from "@/app/admin/actions";
+import ErrorAlert from "@/components/ErrorAlert";
 import type { Settings } from "@/lib/types";
 
 export default function SettingsForm({ settings }: { settings: Settings }) {
@@ -15,12 +16,12 @@ export default function SettingsForm({ settings }: { settings: Settings }) {
         setError(null);
         setSaved(false);
         startTransition(async () => {
-          try {
-            await updateSettings(formData);
-            setSaved(true);
-          } catch (e) {
-            setError(e instanceof Error ? e.message : "เกิดข้อผิดพลาด");
+          const result = await updateSettings(formData);
+          if (result?.error) {
+            setError(result.error);
+            return;
           }
+          setSaved(true);
         });
       }}
       className="space-y-3 rounded-xl border border-gray-200 bg-white p-4"
@@ -57,12 +58,12 @@ export default function SettingsForm({ settings }: { settings: Settings }) {
           />
         </div>
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <ErrorAlert message={error} />}
       {saved && !error && <p className="text-sm text-green-600">บันทึกแล้ว</p>}
       <button
         type="submit"
         disabled={pending}
-        className="rounded-lg bg-gradient-to-r from-orange-500 to-red-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+        className="active:scale-95 transition-transform duration-100 rounded-lg bg-gradient-to-r from-orange-500 to-red-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
       >
         {pending ? "กำลังบันทึก..." : "บันทึก"}
       </button>

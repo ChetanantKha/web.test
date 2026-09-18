@@ -38,3 +38,18 @@ body {
 .animate-mascot-motionlines {
   animation: mascot-motionlines 0.6s ease-in-out infinite;
 }
+
+@keyframes alert-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-alert-in {
+  animation: alert-in 0.18s ease-out;
+}

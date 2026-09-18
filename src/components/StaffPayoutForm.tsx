@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateOwnPayoutInfo } from "@/app/staff/actions";
+import ErrorAlert from "@/components/ErrorAlert";
 import type { Profile } from "@/lib/types";
 
 export default function StaffPayoutForm({ profile }: { profile: Profile }) {
@@ -20,7 +21,10 @@ export default function StaffPayoutForm({ profile }: { profile: Profile }) {
             {profile.bank_name ?? "ยังไม่ตั้งบัญชี"} {profile.bank_account_number ?? ""}
           </p>
         </div>
-        <button onClick={() => setOpen((o) => !o)} className="rounded-lg border border-gray-300 px-3 py-1.5">
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="active:scale-95 transition-transform duration-100 rounded-lg border border-gray-300 px-3 py-1.5"
+        >
           {open ? "ปิด" : "แก้ไข"}
         </button>
       </div>
@@ -30,13 +34,13 @@ export default function StaffPayoutForm({ profile }: { profile: Profile }) {
           action={(formData) => {
             setError(null);
             startTransition(async () => {
-              try {
-                await updateOwnPayoutInfo(formData);
-                setOpen(false);
-                router.refresh();
-              } catch (e) {
-                setError(e instanceof Error ? e.message : "เกิดข้อผิดพลาด");
+              const result = await updateOwnPayoutInfo(formData);
+              if (result?.error) {
+                setError(result.error);
+                return;
               }
+              setOpen(false);
+              router.refresh();
             });
           }}
           className="mt-4 grid grid-cols-1 gap-3 border-t border-gray-100 pt-4 sm:grid-cols-2"
@@ -90,12 +94,16 @@ export default function StaffPayoutForm({ profile }: { profile: Profile }) {
             <input type="file" name="qr_code" accept="image/*" className="w-full text-sm" />
           </div>
 
-          {error && <p className="text-red-600 sm:col-span-2">{error}</p>}
+          {error && (
+            <div className="sm:col-span-2">
+              <ErrorAlert message={error} />
+            </div>
+          )}
 
           <button
             type="submit"
             disabled={pending}
-            className="rounded-lg bg-gradient-to-r from-orange-500 to-red-600 px-4 py-2 font-medium text-white disabled:opacity-50 sm:col-span-2"
+            className="active:scale-95 transition-transform duration-100 rounded-lg bg-gradient-to-r from-orange-500 to-red-600 px-4 py-2 font-medium text-white disabled:opacity-50 sm:col-span-2"
           >
             {pending ? "กำลังบันทึก..." : "บันทึก"}
           </button>

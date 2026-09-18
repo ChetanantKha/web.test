@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createSchedule, createBulkSchedule, updateSchedule, deleteSchedule } from "@/app/admin/actions";
+import ErrorAlert from "@/components/ErrorAlert";
 import {
   COURSE_TYPE_LABEL,
   FIXED_COURSE_TYPES,
@@ -94,37 +95,45 @@ export default function ScheduleForm({
         setError(null);
         setNotice(null);
         startTransition(async () => {
-          try {
-            if (editing) {
-              await updateSchedule(editing.id, formData);
-              onDone();
-            } else if (bulkMode) {
-              const result = await createBulkSchedule(formData);
-              formRef.current?.reset();
-              setStartTime("");
-              setCheckedIds(new Set());
-              setBulkCourseTypes({});
-              if (result.failed.length === 0) {
-                setNotice(`จัดตารางสำเร็จ ${result.created} คน`);
-              } else {
-                setNotice(
-                  `สำเร็จ ${result.created} คน · ไม่สำเร็จ ${result.failed.length} คน: ` +
-                    result.failed.map((f) => `${f.name} (${f.reason})`).join(", "),
-                );
-              }
-            } else {
-              await createSchedule(formData);
-              formRef.current?.reset();
-              setStartTime("");
-              setEndTimeValue("");
-              setCourseType("hourly");
-              setSelectedInstructorId("");
-              setStudentNameValue("");
+          if (editing) {
+            const result = await updateSchedule(editing.id, formData);
+            if (result?.error) {
+              setError(result.error);
+              return;
             }
-            router.refresh();
-          } catch (e) {
-            setError(e instanceof Error ? e.message : "เกิดข้อผิดพลาด");
+            onDone();
+          } else if (bulkMode) {
+            const result = await createBulkSchedule(formData);
+            if ("error" in result) {
+              setError(result.error);
+              return;
+            }
+            formRef.current?.reset();
+            setStartTime("");
+            setCheckedIds(new Set());
+            setBulkCourseTypes({});
+            if (result.failed.length === 0) {
+              setNotice(`จัดตารางสำเร็จ ${result.created} คน`);
+            } else {
+              setNotice(
+                `สำเร็จ ${result.created} คน · ไม่สำเร็จ ${result.failed.length} คน: ` +
+                  result.failed.map((f) => `${f.name} (${f.reason})`).join(", "),
+              );
+            }
+          } else {
+            const result = await createSchedule(formData);
+            if (result?.error) {
+              setError(result.error);
+              return;
+            }
+            formRef.current?.reset();
+            setStartTime("");
+            setEndTimeValue("");
+            setCourseType("hourly");
+            setSelectedInstructorId("");
+            setStudentNameValue("");
           }
+          router.refresh();
         });
       }}
       className="space-y-3 rounded-xl border border-gray-200 bg-white p-4"
@@ -132,7 +141,11 @@ export default function ScheduleForm({
       <div className="flex items-center justify-between">
         <h2 className="font-semibold">{editing ? "แก้ไขตาราง" : "จัดตารางใหม่"}</h2>
         {editing && (
-          <button type="button" onClick={onDone} className="text-sm text-gray-500 hover:underline">
+          <button
+            type="button"
+            onClick={onDone}
+            className="active:scale-95 transition-transform duration-100 text-sm text-gray-500 hover:underline"
+          >
             ยกเลิกการแก้ไข
           </button>
         )}
@@ -391,14 +404,14 @@ export default function ScheduleForm({
         </div>
       )}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <ErrorAlert message={error} />}
       {notice && <p className="text-sm text-gray-700">{notice}</p>}
 
       <div className="flex gap-2">
         <button
           type="submit"
           disabled={pending || (bulkMode && checkedIds.size === 0)}
-          className="rounded-lg bg-gradient-to-r from-orange-500 to-red-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="active:scale-95 transition-transform duration-100 rounded-lg bg-gradient-to-r from-orange-500 to-red-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
           {pending ? "กำลังบันทึก..." : editing ? "บันทึกการแก้ไข" : bulkMode ? "จัดตารางทั้งหมด" : "จัดตาราง"}
         </button>
@@ -410,16 +423,16 @@ export default function ScheduleForm({
               if (!confirm("ยืนยันยกเลิกคลาสนี้?")) return;
               setError(null);
               startTransition(async () => {
-                try {
-                  await deleteSchedule(editing.id);
-                  onDone();
-                  router.refresh();
-                } catch (e) {
-                  setError(e instanceof Error ? e.message : "เกิดข้อผิดพลาด");
+                const result = await deleteSchedule(editing.id);
+                if (result?.error) {
+                  setError(result.error);
+                  return;
                 }
+                onDone();
+                router.refresh();
               });
             }}
-            className="rounded-lg border border-red-200 px-4 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+            className="active:scale-95 transition-transform duration-100 rounded-lg border border-red-200 px-4 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
           >
             ยกเลิกคลาสนี้
           </button>

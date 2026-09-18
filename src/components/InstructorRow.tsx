@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateInstructorProfile } from "@/app/admin/actions";
+import ErrorAlert from "@/components/ErrorAlert";
 import type { Profile } from "@/lib/types";
 
 export default function InstructorRow({ profile }: { profile: Profile }) {
@@ -30,7 +31,10 @@ export default function InstructorRow({ profile }: { profile: Profile }) {
             อีเมลแจ้งเตือน: {profile.notify_email ?? "ยังไม่ตั้ง — จะไม่ได้รับอีเมลยืนยันการสอน"}
           </p>
         </div>
-        <button onClick={() => setOpen((o) => !o)} className="rounded-lg border border-gray-300 px-3 py-1.5">
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className="active:scale-95 transition-transform duration-100 rounded-lg border border-gray-300 px-3 py-1.5"
+        >
           {open ? "ปิด" : "แก้ไข"}
         </button>
       </div>
@@ -40,13 +44,13 @@ export default function InstructorRow({ profile }: { profile: Profile }) {
           action={(formData) => {
             setError(null);
             startTransition(async () => {
-              try {
-                await updateInstructorProfile(profile.id, formData);
-                setOpen(false);
-                router.refresh();
-              } catch (e) {
-                setError(e instanceof Error ? e.message : "เกิดข้อผิดพลาด");
+              const result = await updateInstructorProfile(profile.id, formData);
+              if (result?.error) {
+                setError(result.error);
+                return;
               }
+              setOpen(false);
+              router.refresh();
             });
           }}
           className="mt-4 grid grid-cols-1 gap-3 border-t border-gray-100 pt-4 sm:grid-cols-2"
@@ -164,12 +168,16 @@ export default function InstructorRow({ profile }: { profile: Profile }) {
             เปิดใช้งานอยู่
           </label>
 
-          {error && <p className="text-red-600 sm:col-span-2">{error}</p>}
+          {error && (
+            <div className="sm:col-span-2">
+              <ErrorAlert message={error} />
+            </div>
+          )}
 
           <button
             type="submit"
             disabled={pending}
-            className="rounded-lg bg-gradient-to-r from-orange-500 to-red-600 px-4 py-2 font-medium text-white disabled:opacity-50 sm:col-span-2"
+            className="active:scale-95 transition-transform duration-100 rounded-lg bg-gradient-to-r from-orange-500 to-red-600 px-4 py-2 font-medium text-white disabled:opacity-50 sm:col-span-2"
           >
             {pending ? "กำลังบันทึก..." : "บันทึก"}
           </button>

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { substituteInstructor } from "@/app/admin/actions";
+import ErrorAlert from "@/components/ErrorAlert";
 
 type Instructor = { id: string; full_name: string };
 
@@ -29,7 +30,7 @@ export default function SubstituteInstructorButton({
     return (
       <button
         onClick={() => setOpen(true)}
-        className="rounded-lg border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50"
+        className="active:scale-95 transition-transform duration-100 rounded-lg border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50"
       >
         สอนแทน
       </button>
@@ -58,16 +59,16 @@ export default function SubstituteInstructorButton({
             return;
           setError(null);
           startTransition(async () => {
-            try {
-              await substituteInstructor(sessionId, selected);
-              setOpen(false);
-              router.refresh();
-            } catch (e) {
-              setError(e instanceof Error ? e.message : "เกิดข้อผิดพลาด");
+            const result = await substituteInstructor(sessionId, selected);
+            if (result?.error) {
+              setError(result.error);
+              return;
             }
+            setOpen(false);
+            router.refresh();
           });
         }}
-        className="rounded-lg bg-gradient-to-r from-orange-500 to-red-600 px-2 py-1 text-xs text-white disabled:opacity-50"
+        className="active:scale-95 transition-transform duration-100 rounded-lg bg-gradient-to-r from-orange-500 to-red-600 px-2 py-1 text-xs text-white disabled:opacity-50"
       >
         {pending ? "..." : "ยืนยัน"}
       </button>
@@ -78,11 +79,11 @@ export default function SubstituteInstructorButton({
           setSelected("");
           setError(null);
         }}
-        className="text-xs text-gray-500 hover:underline"
+        className="active:scale-95 transition-transform duration-100 text-xs text-gray-500 hover:underline"
       >
         ยกเลิก
       </button>
-      {error && <p className="w-full text-xs text-red-600">{error}</p>}
+      {error && <ErrorAlert message={error} />}
     </div>
   );
 }

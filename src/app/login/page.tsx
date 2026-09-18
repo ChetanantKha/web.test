@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { loginWithNickname } from "@/app/login/actions";
+import ErrorAlert from "@/components/ErrorAlert";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -58,12 +59,12 @@ export default function LoginPage() {
           />
         </div>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <ErrorAlert message={error} />}
 
         <button
           type="submit"
           disabled={pending}
-          className="w-full rounded-lg bg-gradient-to-r from-orange-500 to-red-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="active:scale-95 transition-transform duration-100 w-full rounded-lg bg-gradient-to-r from-orange-500 to-red-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
           {pending ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
         </button>
