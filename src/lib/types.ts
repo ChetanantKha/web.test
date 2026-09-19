@@ -37,6 +37,9 @@ export type Session = {
   paid_by: string | null;
   paid_at: string | null;
   created_at: string;
+  outside_availability: boolean;
+  instructor_confirmed_at: string | null;
+  instructor_rejected_at: string | null;
   profiles?: { full_name: string } | null;
 };
 

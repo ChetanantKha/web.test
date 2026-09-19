@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { buildSlotTimes, addMinutes } from "@/lib/slots";
 import { formatThaiDate, shiftDate } from "@/lib/date";
 import { COURSE_TYPE_LABEL } from "@/lib/courseTypes";
+import { dayOfWeekOf, isWithinAvailability, type AvailabilityDay } from "@/lib/availability";
 import PrintButton from "@/components/PrintButton";
 import type { Session } from "@/lib/types";
 
@@ -43,12 +44,30 @@ function balancedChunk<T>(items: T[], maxPerPage: number): T[][] {
   return chunks;
 }
 
-type GridCell = { render: false } | { render: true; rowSpan: number; session: Session | null };
+type GridCell =
+  | { render: false }
+  | { render: true; rowSpan: number; kind: "session"; session: Session }
+  | { render: true; rowSpan: number; kind: "open" | "closed" };
 
-/** One entry per row for a single instructor column: a session spanning several
- *  grid rows collapses into one rowSpan'd cell on its first row, `render: false`
- *  on the rows it covers after that (so the <table> doesn't double-paint them). */
-function buildColumn(instructorId: string, slotTimes: string[], sessions: Session[]): GridCell[] {
+/** One entry per row for a single instructor column: a session, or a run of consecutive
+ *  open/closed slots, collapses into one rowSpan'd cell on its first row, `render: false`
+ *  on the rows it covers after that (so the <table> doesn't double-paint them). A slot
+ *  outside the instructor's declared availability shows "closed" instead of "open" so the
+ *  board makes clear they're not taking bookings then, not just that nothing's booked yet. */
+function buildColumn(
+  instructorId: string,
+  slotTimes: string[],
+  sessions: Session[],
+  dayOfWeek: number,
+  availability: AvailabilityDay[],
+): GridCell[] {
+  const hasSessionAt = (slot: string) =>
+    sessions.some(
+      (sess) => sess.instructor_id === instructorId && slot >= sess.start_time.slice(0, 5) && slot < sess.end_time.slice(0, 5),
+    );
+  const isClosedAt = (slot: string) =>
+    !isWithinAvailability(dayOfWeek, slot, addMinutes(slot, GRID_SLOT_MINUTES), availability);
+
   const cells: GridCell[] = [];
   let skipRemaining = 0;
   for (let i = 0; i < slotTimes.length; i++) {
@@ -64,13 +83,24 @@ function buildColumn(instructorId: string, slotTimes: string[], sessions: Sessio
         slot >= sess.start_time.slice(0, 5) &&
         slot < sess.end_time.slice(0, 5),
     );
-    if (!s) {
-      cells.push({ render: true, rowSpan: 1, session: null });
+    if (s) {
+      let span = 1;
+      while (i + span < slotTimes.length && slotTimes[i + span] < s.end_time.slice(0, 5)) span++;
+      cells.push({ render: true, rowSpan: span, kind: "session", session: s });
+      skipRemaining = span - 1;
       continue;
     }
+
+    const closed = isClosedAt(slot);
     let span = 1;
-    while (i + span < slotTimes.length && slotTimes[i + span] < s.end_time.slice(0, 5)) span++;
-    cells.push({ render: true, rowSpan: span, session: s });
+    while (
+      i + span < slotTimes.length &&
+      !hasSessionAt(slotTimes[i + span]) &&
+      isClosedAt(slotTimes[i + span]) === closed
+    ) {
+      span++;
+    }
+    cells.push({ render: true, rowSpan: span, kind: closed ? "closed" : "open" });
     skipRemaining = span - 1;
   }
   return cells;
@@ -89,7 +119,7 @@ export default async function CalendarPrintPage({ params }: { params: Promise<{ 
 
   const { date } = await params;
 
-  const [{ data: settings }, { data: instructors }, { data: sessions }] = await Promise.all([
+  const [{ data: settings }, { data: instructors }, { data: sessions }, { data: availability }] = await Promise.all([
     supabase.from("settings").select("*").eq("id", 1).single(),
     supabase
       .from("profiles")
@@ -102,7 +132,16 @@ export default async function CalendarPrintPage({ params }: { params: Promise<{ 
       .select("*, profiles!instructor_id(full_name)")
       .eq("session_date", date)
       .order("start_time"),
+    supabase.from("instructor_availability").select("instructor_id, day_of_week, is_closed, start_time, end_time"),
   ]);
+
+  const dayOfWeek = dayOfWeekOf(date);
+  const availabilityByInstructor = new Map<string, AvailabilityDay[]>();
+  for (const row of availability ?? []) {
+    const list = availabilityByInstructor.get(row.instructor_id) ?? [];
+    list.push(row);
+    availabilityByInstructor.set(row.instructor_id, list);
+  }
 
   const slotTimes = buildSlotTimes(
     settings?.business_start?.slice(0, 5) ?? "06:00",
@@ -149,7 +188,9 @@ export default async function CalendarPrintPage({ params }: { params: Promise<{ 
         <p className="text-center text-sm text-gray-500">ยังไม่มีครูผู้สอนที่ใช้งานอยู่</p>
       ) : (
         instructorPages.map((pageInstructors, pageIndex) => {
-          const columns = pageInstructors.map((ins) => buildColumn(ins.id, slotTimes, daySessions));
+          const columns = pageInstructors.map((ins) =>
+            buildColumn(ins.id, slotTimes, daySessions, dayOfWeek, availabilityByInstructor.get(ins.id) ?? []),
+          );
 
           return (
             <div
@@ -207,13 +248,13 @@ export default async function CalendarPrintPage({ params }: { params: Promise<{ 
                           const cell = columns[i][rowIndex];
                           if (!cell.render) return null;
                           const theme = COLUMN_THEMES[colorIndexById.get(ins.id)! % COLUMN_THEMES.length];
-                          const s = cell.session;
+                          const s = cell.kind === "session" ? cell.session : null;
                           return (
                             <td
                               key={ins.id}
                               rowSpan={cell.rowSpan}
                               className={`border-b border-l ${theme.border} p-1.5 align-top text-[11px] leading-snug sm:text-xs ${
-                                s ? theme.cell : "bg-white"
+                                s ? theme.cell : cell.kind === "closed" ? "bg-gray-100" : "bg-white"
                               }`}
                             >
                               {s ? (
@@ -226,11 +267,16 @@ export default async function CalendarPrintPage({ params }: { params: Promise<{ 
                                   </p>
                                   {s.student_name ? <p className="text-gray-600">นร. {s.student_name}</p> : null}
                                 </div>
-                              ) : (
+                              ) : cell.kind === "closed" ? (
                                 <div className="flex h-full flex-col items-center justify-center gap-1 py-1">
-                                  <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">
-                                    ว่าง
+                                  <span className="rounded-full bg-gray-300 px-1.5 py-0.5 text-[10px] font-bold text-gray-700">
+                                    ปิดรับสอน
                                   </span>
+                                </div>
+                              ) : (
+                                // Left blank on purpose — this is the printed board's writable space for
+                                // penciling in a walk-in booking by hand, not just "nothing booked yet".
+                                <div className="flex h-full min-h-8 flex-col justify-end py-1">
                                   <span className="w-full border-b border-dashed border-gray-300" />
                                 </div>
                               )}

@@ -2,11 +2,13 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { updateInstructorProfile } from "@/app/admin/actions";
+import { updateInstructorProfile, updateInstructorAvailability } from "@/app/admin/actions";
+import AvailabilityEditor from "@/components/AvailabilityEditor";
 import ErrorAlert from "@/components/ErrorAlert";
+import type { AvailabilityDay } from "@/lib/availability";
 import type { Profile } from "@/lib/types";
 
-export default function InstructorRow({ profile }: { profile: Profile }) {
+export default function InstructorRow({ profile, availability }: { profile: Profile; availability: AvailabilityDay[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -182,6 +184,16 @@ export default function InstructorRow({ profile }: { profile: Profile }) {
             {pending ? "กำลังบันทึก..." : "บันทึก"}
           </button>
         </form>
+      )}
+
+      {open && (
+        <div className="mt-4 border-t border-gray-100 pt-4">
+          <h3 className="mb-2 font-medium">เวลาที่รับสอน</h3>
+          <AvailabilityEditor
+            rows={availability}
+            saveAction={updateInstructorAvailability.bind(null, profile.id)}
+          />
+        </div>
       )}
     </div>
   );

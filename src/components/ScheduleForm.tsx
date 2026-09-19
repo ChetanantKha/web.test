@@ -112,17 +112,30 @@ export default function ScheduleForm({
             setStartTime("");
             setCheckedIds(new Set());
             setBulkCourseTypes({});
-            if (result.failed.length === 0) {
-              setNotice(`จัดตารางสำเร็จ ${result.created} คน`);
-            } else {
-              setNotice(
-                `สำเร็จ ${result.created} คน · ไม่สำเร็จ ${result.failed.length} คน: ` +
-                  result.failed.map((f) => `${f.name} (${f.reason})`).join(", "),
+            const notes: string[] = [];
+            notes.push(
+              result.failed.length === 0
+                ? `จัดตารางสำเร็จ ${result.created} คน`
+                : `สำเร็จ ${result.created} คน · ไม่สำเร็จ ${result.failed.length} คน: ` +
+                    result.failed.map((f) => `${f.name} (${f.reason})`).join(", "),
+            );
+            if (result.outsideAvailability.length > 0) {
+              notes.push(
+                `นอกเวลาที่สะดวกของ: ${result.outsideAvailability.join(", ")} (รอผู้สอนยืนยันรับสอน)`,
               );
             }
+            setNotice(notes.join(" · "));
           } else {
-            const result = await createSchedule(formData);
-            if (result?.error) {
+            let result = await createSchedule(formData);
+            if (result && "needsAvailabilityConfirm" in result) {
+              const proceed = confirm(
+                `คอร์สนี้อยู่นอกเหนือจากตารางเวลาที่ ${result.instructorName} รับสอน จะยังลงตารางสอนอยู่มั้ย?`,
+              );
+              if (!proceed) return;
+              formData.set("override_availability", "true");
+              result = await createSchedule(formData);
+            }
+            if (result && "error" in result) {
               setError(result.error);
               return;
             }

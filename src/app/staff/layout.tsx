@@ -3,6 +3,7 @@ import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
 import LogoutButton from "@/components/LogoutButton";
 import FinishPrompt from "@/components/FinishPrompt";
+import AvailabilityConflictPrompt from "@/components/AvailabilityConflictPrompt";
 
 export default async function StaffLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -23,6 +24,7 @@ export default async function StaffLayout({ children }: { children: React.ReactN
       </div>
       {children}
       <FinishPrompt instructorId={user.id} />
+      <AvailabilityConflictPrompt instructorId={user.id} />
     </div>
   );
 }

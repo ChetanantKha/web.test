@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { computePayout } from "@/lib/payout";
 import { durationHours } from "@/lib/slots";
 import { FIXED_COURSE_TYPES, isDurationScaled, isFixedCourseType, isPackageCourseType } from "@/lib/courseTypes";
+import { dayOfWeekOf, isWithinAvailability, saveAvailability } from "@/lib/availability";
 
 async function requireAdmin() {
   const supabase = await createClient();
@@ -125,6 +126,20 @@ async function assertNoOverlap(
   }
 }
 
+async function checkAvailability(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  instructorId: string,
+  sessionDate: string,
+  startTime: string,
+  endTime: string,
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("instructor_availability")
+    .select("day_of_week, is_closed, start_time, end_time")
+    .eq("instructor_id", instructorId);
+  return isWithinAvailability(dayOfWeekOf(sessionDate), startTime, endTime, data ?? []);
+}
+
 function readScheduleFields(formData: FormData) {
   return {
     instructor_id: String(formData.get("instructor_id") || ""),
@@ -223,10 +238,22 @@ export async function createSchedule(formData: FormData) {
 
     const { data: instructor } = await supabase
       .from("profiles")
-      .select("rate_type, rate_value")
+      .select("full_name, rate_type, rate_value")
       .eq("id", fields.instructor_id)
       .single();
     if (!instructor) throw new Error("ไม่พบผู้สอน");
+
+    const withinAvailability = await checkAvailability(
+      supabase,
+      fields.instructor_id,
+      fields.session_date,
+      fields.start_time,
+      fields.end_time,
+    );
+    const overrideAvailability = formData.get("override_availability") === "true";
+    if (!withinAvailability && !overrideAvailability) {
+      return { needsAvailabilityConfirm: true as const, instructorName: instructor.full_name };
+    }
 
     const pkg = await linkToPackage(supabase, fields.instructor_id, fields.student_name, fields.course_type);
 
@@ -241,9 +268,14 @@ export async function createSchedule(formData: FormData) {
             durationHours(fields.start_time, fields.end_time),
           );
 
-    const { error } = await supabase
-      .from("sessions")
-      .insert({ ...fields, price, instructor_payout, package_id: pkg?.id ?? null, created_by: adminId });
+    const { error } = await supabase.from("sessions").insert({
+      ...fields,
+      price,
+      instructor_payout,
+      package_id: pkg?.id ?? null,
+      created_by: adminId,
+      outside_availability: !withinAvailability,
+    });
     if (error) throw new Error(error.message);
 
     revalidatePath("/admin");
@@ -255,9 +287,15 @@ export async function createSchedule(formData: FormData) {
 export type BulkScheduleResult = {
   created: number;
   failed: { name: string; reason: string }[];
+  outsideAvailability: string[];
 };
 
-/** One shared date/time, one row per checked instructor (own student_name + price each). */
+/** One shared date/time, one row per checked instructor (own student_name + price each).
+ *  Unlike the single-booking form, this doesn't stop to ask "still book it?" per instructor
+ *  — checking many people into one shared time slot is already a deliberate admin action,
+ *  so out-of-availability rows are just flagged (outside_availability: true) and reported
+ *  back in `outsideAvailability`. Each flagged instructor still gets the normal
+ *  accept/reject prompt on their own side. */
 export async function createBulkSchedule(formData: FormData) {
   return asResult(async (): Promise<BulkScheduleResult> => {
     const { supabase, adminId } = await requireAdmin();
@@ -270,7 +308,7 @@ export async function createBulkSchedule(formData: FormData) {
     const instructorIds = formData.getAll("instructor_ids").map(String);
     if (instructorIds.length === 0) throw new Error("กรุณาเลือกผู้สอนอย่างน้อย 1 คน");
 
-    const result: BulkScheduleResult = { created: 0, failed: [] };
+    const result: BulkScheduleResult = { created: 0, failed: [], outsideAvailability: [] };
 
     for (const instructorId of instructorIds) {
       const { data: instructor } = await supabase
@@ -288,6 +326,9 @@ export async function createBulkSchedule(formData: FormData) {
         const student_name = String(formData.get(`student_name__${instructorId}`) || "") || null;
         const course_type = String(formData.get(`course_type__${instructorId}`) || "custom");
         const custom_price = Number(formData.get(`price__${instructorId}`) || 0);
+
+        const withinAvailability = await checkAvailability(supabase, instructorId, session_date, start_time, end_time);
+        if (!withinAvailability) result.outsideAvailability.push(name);
 
         const pkg = await linkToPackage(supabase, instructorId, student_name, course_type);
 
@@ -313,6 +354,7 @@ export async function createBulkSchedule(formData: FormData) {
           instructor_payout,
           package_id: pkg?.id ?? null,
           created_by: adminId,
+          outside_availability: !withinAvailability,
         });
         if (error) throw new Error(error.message);
 
@@ -441,6 +483,12 @@ export async function substituteInstructor(sessionId: string, newInstructorId: s
     const update: Record<string, unknown> = {
       instructor_id: newInstructorId,
       updated_at: new Date().toISOString(),
+      // Admin explicitly picked this instructor (often to resolve the original one
+      // rejecting an outside-availability booking) — treat it as a clean, confirmed
+      // reassignment rather than re-running the availability check on the substitute.
+      outside_availability: false,
+      instructor_confirmed_at: null,
+      instructor_rejected_at: null,
     };
     if (!isFixedCourseType(existing.course_type)) {
       update.instructor_payout = computePayout(newInstructor.rate_type, newInstructor.rate_value, existing.price);
@@ -651,5 +699,16 @@ export async function deletePackage(packageId: string) {
     revalidatePath("/admin/packages");
     revalidatePath("/admin");
     revalidatePath("/admin/list");
+  });
+}
+
+// ============================================================
+// instructor weekly availability
+// ============================================================
+export async function updateInstructorAvailability(instructorId: string, formData: FormData) {
+  return asResult(async () => {
+    const { supabase } = await requireAdmin();
+    await saveAvailability(supabase, instructorId, formData);
+    revalidatePath("/admin/instructors");
   });
 }

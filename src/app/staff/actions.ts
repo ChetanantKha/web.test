@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { saveAvailability } from "@/lib/availability";
 
 /** Server Action errors that reach the client via `throw` have their message redacted
  *  to a generic placeholder in production builds of this Next.js version — every exported
@@ -78,6 +79,57 @@ export async function updateOwnPayoutInfo(formData: FormData) {
       })
       .eq("id", user.id);
     if (error) throw new Error(error.message);
+
+    revalidatePath("/staff");
+  });
+}
+
+export async function updateOwnAvailability(formData: FormData) {
+  return asResult(async () => {
+    const supabase = await createClient();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const user = session?.user ?? null;
+    if (!user) throw new Error("ไม่ได้เข้าสู่ระบบ");
+
+    await saveAvailability(supabase, user.id, formData);
+    revalidatePath("/staff");
+  });
+}
+
+/** Instructor's answer to a class the admin booked outside their declared availability.
+ *  Accepting just clears the pending state (the class already exists as normal from
+ *  here). Rejecting flags it for the admin's side to resolve — find a substitute
+ *  (substituteInstructor) or delete it (deleteSchedule, which returns any linked
+ *  package's session count). */
+export async function respondToOutsideAvailability(sessionId: string, accept: boolean) {
+  return asResult(async () => {
+    const supabase = await createClient();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const user = session?.user ?? null;
+    if (!user) throw new Error("ไม่ได้เข้าสู่ระบบ");
+
+    const { data: existing } = await supabase.from("sessions").select("*").eq("id", sessionId).single();
+    if (!existing) throw new Error("ไม่พบรายการ");
+    if (existing.instructor_id !== user.id) throw new Error("ไม่มีสิทธิ์ตอบรายการนี้");
+
+    const update = accept
+      ? { instructor_confirmed_at: new Date().toISOString() }
+      : { instructor_rejected_at: new Date().toISOString() };
+
+    const { error } = await supabase.from("sessions").update(update).eq("id", sessionId);
+    if (error) throw new Error(error.message);
+
+    await supabase.from("audit_log").insert({
+      session_id: sessionId,
+      action: "update",
+      changed_by: user.id,
+      old_data: existing,
+      new_data: { ...existing, ...update },
+    });
 
     revalidatePath("/staff");
   });

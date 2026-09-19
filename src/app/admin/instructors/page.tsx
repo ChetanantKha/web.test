@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import InstructorRow from "@/components/InstructorRow";
+import type { AvailabilityDay } from "@/lib/availability";
 
 export default async function InstructorsPage() {
   const supabase = await createClient();
@@ -13,10 +14,17 @@ export default async function InstructorsPage() {
   const { data: me } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   if (me?.role !== "admin") redirect("/staff");
 
-  const { data: instructors } = await supabase
-    .from("profiles")
-    .select("*")
-    .order("created_at", { ascending: false });
+  const [{ data: instructors }, { data: availability }] = await Promise.all([
+    supabase.from("profiles").select("*").order("created_at", { ascending: false }),
+    supabase.from("instructor_availability").select("instructor_id, day_of_week, is_closed, start_time, end_time"),
+  ]);
+
+  const availabilityByInstructor = new Map<string, AvailabilityDay[]>();
+  for (const row of availability ?? []) {
+    const list = availabilityByInstructor.get(row.instructor_id) ?? [];
+    list.push(row);
+    availabilityByInstructor.set(row.instructor_id, list);
+  }
 
   return (
     <div className="space-y-6">
@@ -30,7 +38,9 @@ export default async function InstructorsPage() {
       </div>
 
       <div className="space-y-3">
-        {instructors?.map((p) => <InstructorRow key={p.id} profile={p} />)}
+        {instructors?.map((p) => (
+          <InstructorRow key={p.id} profile={p} availability={availabilityByInstructor.get(p.id) ?? []} />
+        ))}
         {(!instructors || instructors.length === 0) && (
           <p className="text-sm text-gray-500">ยังไม่มีผู้ใช้ในระบบ</p>
         )}
