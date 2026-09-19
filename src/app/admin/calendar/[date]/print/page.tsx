@@ -11,8 +11,10 @@ import type { Session } from "@/lib/types";
 type Instructor = { id: string; full_name: string };
 
 // Caps how wide a single printed sheet gets — beyond this, instructors spill onto
-// an extra landscape page rather than squeezing columns unreadably thin.
-const INSTRUCTORS_PER_PAGE = 6;
+// an extra landscape page rather than squeezing columns unreadably thin. table-fixed
+// keeps columns within the page either way; this only controls when it's worth
+// trading narrower columns for staying on one sheet.
+const INSTRUCTORS_PER_PAGE = 10;
 
 // The grid's row unit. Bookings can start on any half hour (the time <input> allows
 // any minute), so a coarser hourly grid mis-shows e.g. a 10:30-11:30 class as if it
