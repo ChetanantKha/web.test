@@ -1,11 +1,78 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
-import { buildSlotTimes } from "@/lib/slots";
+import { buildSlotTimes, addMinutes } from "@/lib/slots";
 import { formatThaiDate, shiftDate } from "@/lib/date";
 import { COURSE_TYPE_LABEL } from "@/lib/courseTypes";
 import PrintButton from "@/components/PrintButton";
 import type { Session } from "@/lib/types";
+
+type Instructor = { id: string; full_name: string };
+
+// Caps how wide a single printed sheet gets — beyond this, instructors spill onto
+// an extra landscape page rather than squeezing columns unreadably thin.
+const INSTRUCTORS_PER_PAGE = 6;
+
+// The grid's row unit. Bookings can start on any half hour (the time <input> allows
+// any minute), so a coarser hourly grid mis-shows e.g. a 10:30-11:30 class as if it
+// were the full 11:00-12:00 slot. 30 minutes is fine enough to align to that without
+// doubling row count as badly as a per-minute grid would.
+const GRID_SLOT_MINUTES = 30;
+
+const COLUMN_THEMES = [
+  { header: "bg-blue-600", cell: "bg-blue-50", border: "border-blue-200" },
+  { header: "bg-orange-500", cell: "bg-orange-50", border: "border-orange-200" },
+  { header: "bg-rose-500", cell: "bg-rose-50", border: "border-rose-200" },
+  { header: "bg-emerald-600", cell: "bg-emerald-50", border: "border-emerald-200" },
+  { header: "bg-violet-600", cell: "bg-violet-50", border: "border-violet-200" },
+  { header: "bg-amber-500", cell: "bg-amber-50", border: "border-amber-200" },
+];
+
+/** Splits into as few pages as `maxPerPage` allows, spreading instructors evenly across
+ *  them — e.g. 7 instructors at maxPerPage=6 becomes two pages of 4+3, not a nearly-empty
+ *  lone-instructor second page (naive fixed-size chunking would do 6+1). */
+function balancedChunk<T>(items: T[], maxPerPage: number): T[][] {
+  if (items.length === 0) return [];
+  const pageCount = Math.ceil(items.length / maxPerPage);
+  const perPage = Math.ceil(items.length / pageCount);
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += perPage) chunks.push(items.slice(i, i + perPage));
+  return chunks;
+}
+
+type GridCell = { render: false } | { render: true; rowSpan: number; session: Session | null };
+
+/** One entry per row for a single instructor column: a session spanning several
+ *  grid rows collapses into one rowSpan'd cell on its first row, `render: false`
+ *  on the rows it covers after that (so the <table> doesn't double-paint them). */
+function buildColumn(instructorId: string, slotTimes: string[], sessions: Session[]): GridCell[] {
+  const cells: GridCell[] = [];
+  let skipRemaining = 0;
+  for (let i = 0; i < slotTimes.length; i++) {
+    if (skipRemaining > 0) {
+      cells.push({ render: false });
+      skipRemaining--;
+      continue;
+    }
+    const slot = slotTimes[i];
+    const s = sessions.find(
+      (sess) =>
+        sess.instructor_id === instructorId &&
+        slot >= sess.start_time.slice(0, 5) &&
+        slot < sess.end_time.slice(0, 5),
+    );
+    if (!s) {
+      cells.push({ render: true, rowSpan: 1, session: null });
+      continue;
+    }
+    let span = 1;
+    while (i + span < slotTimes.length && slotTimes[i + span] < s.end_time.slice(0, 5)) span++;
+    cells.push({ render: true, rowSpan: span, session: s });
+    skipRemaining = span - 1;
+  }
+  return cells;
+}
 
 export default async function CalendarPrintPage({ params }: { params: Promise<{ date: string }> }) {
   const supabase = await createClient();
@@ -38,19 +105,18 @@ export default async function CalendarPrintPage({ params }: { params: Promise<{ 
   const slotTimes = buildSlotTimes(
     settings?.business_start?.slice(0, 5) ?? "06:00",
     settings?.business_end?.slice(0, 5) ?? "21:00",
-    settings?.slot_minutes ?? 60,
+    GRID_SLOT_MINUTES,
   );
 
-  const activeInstructors = instructors ?? [];
+  const activeInstructors = (instructors ?? []) as Instructor[];
   const daySessions = (sessions ?? []) as Session[];
-
-  const sessionAt = (instructorId: string, slot: string) =>
-    daySessions.find(
-      (s) => s.instructor_id === instructorId && slot >= s.start_time.slice(0, 5) && slot < s.end_time.slice(0, 5),
-    );
+  const instructorPages = balancedChunk(activeInstructors, INSTRUCTORS_PER_PAGE);
+  // Keyed by instructor id (not page-local index) so a column keeps the same color
+  // regardless of which page it lands on after balancedChunk's variable page sizes.
+  const colorIndexById = new Map(activeInstructors.map((ins, idx) => [ins.id, idx]));
 
   return (
-    <div className="space-y-4 print:space-y-3">
+    <div className="space-y-6 print:space-y-0">
       <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
         <div className="flex items-center gap-2 text-sm">
           <Link
@@ -69,54 +135,114 @@ export default async function CalendarPrintPage({ params }: { params: Promise<{ 
             กลับไปแก้ไขตาราง
           </Link>
         </div>
-        <PrintButton />
-      </div>
-
-      <div className="text-center">
-        <h1 className="text-2xl font-bold">ตารางสอน T-STAR Academy</h1>
-        <p className="text-lg">{formatThaiDate(date)}</p>
+        <div className="flex items-center gap-3">
+          <p className="text-xs text-gray-500">
+            ก่อนกดพิมพ์: เปิดตัวเลือก &quot;พิมพ์พื้นหลัง / Background graphics&quot; ในหน้าต่างพิมพ์ ไม่งั้นสีจะหาย
+          </p>
+          <PrintButton />
+        </div>
       </div>
 
       {activeInstructors.length === 0 ? (
         <p className="text-center text-sm text-gray-500">ยังไม่มีครูผู้สอนที่ใช้งานอยู่</p>
       ) : (
-        <div className="space-y-3 print:space-y-2">
-          {slotTimes.map((slot) => (
+        instructorPages.map((pageInstructors, pageIndex) => {
+          const columns = pageInstructors.map((ins) => buildColumn(ins.id, slotTimes, daySessions));
+
+          return (
             <div
-              key={slot}
-              className="rounded-xl border border-gray-300 p-3 print:break-inside-avoid print:rounded-none print:border-black"
+              key={pageIndex}
+              className={`space-y-4 rounded-3xl border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-blue-50 p-6 print:p-4 ${
+                pageIndex > 0 ? "print:break-before-page" : ""
+              }`}
             >
-              <p className="text-lg font-semibold">{slot} น.</p>
-              <ul className="mt-1 space-y-1">
-                {activeInstructors.map((ins) => {
-                  const s = sessionAt(ins.id, slot);
-                  return (
-                    <li
-                      key={ins.id}
-                      className="flex flex-wrap items-baseline justify-between gap-x-4 text-base"
-                    >
-                      <span className="font-medium">{ins.full_name}</span>
-                      {s ? (
-                        <span className="text-right">
-                          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-sm font-semibold text-amber-800 print:bg-transparent print:font-bold">
-                            เต็ม
-                          </span>{" "}
-                          {COURSE_TYPE_LABEL[s.course_type as keyof typeof COURSE_TYPE_LABEL] ?? s.course_type}
-                          {s.student_name ? ` · นักเรียน ${s.student_name}` : ""} (
-                          {s.start_time.slice(0, 5)}-{s.end_time.slice(0, 5)})
-                        </span>
-                      ) : (
-                        <span className="rounded-full bg-green-100 px-2 py-0.5 text-sm font-semibold text-green-800 print:bg-transparent print:font-bold">
-                          ว่าง
-                        </span>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
+              <div className="relative flex items-center justify-center gap-4 overflow-hidden py-2">
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute -left-6 -top-8 h-28 w-28 rounded-full bg-blue-200/50 blur-2xl"
+                />
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute -right-6 -top-8 h-28 w-28 rounded-full bg-orange-200/50 blur-2xl"
+                />
+                <Image
+                  src="/logo.jpg"
+                  alt="T-STAR Academy"
+                  width={64}
+                  height={64}
+                  className="relative rounded-2xl shadow-md"
+                />
+                <div className="relative rounded-full bg-gradient-to-r from-orange-500 to-red-600 px-8 py-3 shadow-md">
+                  <h1 className="text-xl font-bold whitespace-nowrap text-white sm:text-2xl">
+                    ตารางสอน T-STAR Academy
+                  </h1>
+                </div>
+              </div>
+              <p className="text-center text-lg font-medium text-blue-950">{formatThaiDate(date)}</p>
+
+              <div className="overflow-x-auto">
+                <table className="w-full table-fixed border-separate border-spacing-0 overflow-hidden rounded-2xl border border-blue-950/20">
+                  <thead>
+                    <tr>
+                      <th className="w-24 bg-blue-950 p-2 text-sm font-semibold text-white sm:w-28">เวลา</th>
+                      {pageInstructors.map((ins) => {
+                        const theme = COLUMN_THEMES[colorIndexById.get(ins.id)! % COLUMN_THEMES.length];
+                        return (
+                          <th key={ins.id} className={`p-2 text-sm font-semibold text-white ${theme.header}`}>
+                            {ins.full_name}
+                          </th>
+                        );
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {slotTimes.map((slot, rowIndex) => (
+                      <tr key={slot}>
+                        <td className="border-b border-blue-950/10 bg-blue-50 p-2 text-center text-xs font-medium text-blue-950 sm:text-sm">
+                          {slot}-{addMinutes(slot, GRID_SLOT_MINUTES)}
+                        </td>
+                        {pageInstructors.map((ins, i) => {
+                          const cell = columns[i][rowIndex];
+                          if (!cell.render) return null;
+                          const theme = COLUMN_THEMES[colorIndexById.get(ins.id)! % COLUMN_THEMES.length];
+                          const s = cell.session;
+                          return (
+                            <td
+                              key={ins.id}
+                              rowSpan={cell.rowSpan}
+                              className={`border-b border-l ${theme.border} p-1.5 align-top text-[11px] leading-snug sm:text-xs ${
+                                s ? theme.cell : "bg-white"
+                              }`}
+                            >
+                              {s ? (
+                                <div className="space-y-0.5">
+                                  <span className="inline-block rounded-full bg-amber-200 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">
+                                    เต็ม {s.start_time.slice(0, 5)}-{s.end_time.slice(0, 5)}
+                                  </span>
+                                  <p className="font-medium text-gray-800">
+                                    {COURSE_TYPE_LABEL[s.course_type as keyof typeof COURSE_TYPE_LABEL] ?? s.course_type}
+                                  </p>
+                                  {s.student_name ? <p className="text-gray-600">นร. {s.student_name}</p> : null}
+                                </div>
+                              ) : (
+                                <div className="flex h-full flex-col items-center justify-center gap-1 py-1">
+                                  <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">
+                                    ว่าง
+                                  </span>
+                                  <span className="w-full border-b border-dashed border-gray-300" />
+                                </div>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          ))}
-        </div>
+          );
+        })
       )}
     </div>
   );
