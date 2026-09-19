@@ -19,6 +19,14 @@ export function todayLocalISO(): string {
   return toLocalISODate(new Date());
 }
 
+/** Shift a "YYYY-MM-DD" string by `deltaDays` calendar days (UTC-anchored so it's pure date math, no timezone involved). */
+export function shiftDate(dateIso: string, deltaDays: number): string {
+  const [y, m, d] = dateIso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + deltaDays);
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
+}
+
 /** Shift a "YYYY-MM" string by `delta` months, using pure integer arithmetic (no Date/timezone involved). */
 export function shiftMonth(yearMonth: string, delta: number): string {
   const [year, month] = yearMonth.split("-").map(Number);

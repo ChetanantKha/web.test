@@ -49,9 +49,14 @@ export default async function CalendarDayPage({ params }: { params: Promise<{ da
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">ตารางวันที่ {formatThaiDate(date)}</h1>
-        <Link href="/admin/calendar" className="text-sm underline">
-          กลับปฏิทิน
-        </Link>
+        <div className="flex items-center gap-3 text-sm">
+          <Link href={`/admin/calendar/${date}/print`} className="underline">
+            พิมพ์ตารางติดลานสเก็ต
+          </Link>
+          <Link href="/admin/calendar" className="underline">
+            กลับปฏิทิน
+          </Link>
+        </div>
       </div>
 
       <DayView
