@@ -66,6 +66,23 @@ export default function ScheduleForm({
         )
       : undefined;
 
+  // Catches the "typed the right name, picked the wrong course type" mistake — this
+  // student has a *different* active package than the one currently selected, so this
+  // booking won't link to it (linkToPackage matches on course_type too). Warn either way,
+  // even if picking something else was deliberate (e.g. an extra one-off lesson outside
+  // the package) — better a redundant confirm than a silently mis-billed session.
+  const mismatchedPackage =
+    !editing && !bulkMode && studentNameValue.trim() && selectedInstructorId
+      ? packages.find(
+          (p) =>
+            p.instructor_id === selectedInstructorId &&
+            p.student_name.trim().toLowerCase() === studentNameValue.trim().toLowerCase() &&
+            p.course_type !== courseType &&
+            p.status === "active" &&
+            p.used_sessions < p.total_sessions,
+        )
+      : undefined;
+
   // Only students already grandfathered into the old Slalom/Slide package keep the option
   // to book more sessions against it — everyone else sees just the current course types.
   const hasLegacySlalomPackage =
@@ -150,6 +167,13 @@ export default function ScheduleForm({
             }
             setNotice(notes.join(" · "));
           } else {
+            if (mismatchedPackage) {
+              const remaining = mismatchedPackage.total_sessions - mismatchedPackage.used_sessions;
+              const proceed = confirm(
+                `${studentNameValue.trim()} มีคอร์ส "${COURSE_TYPE_LABEL[mismatchedPackage.course_type as CourseType]}" ค้างอยู่ (เหลือ ${remaining}/${mismatchedPackage.total_sessions} ครั้ง) แต่กำลังจะลงเป็น "${COURSE_TYPE_LABEL[courseType]}" แทน ใช่คนเดียวกันแต่ตั้งใจลงนอกคอร์สหรือเปล่า? กด OK เพื่อลงต่อ`,
+              );
+              if (!proceed) return;
+            }
             let result = await createSchedule(formData);
             if (result && "needsAvailabilityConfirm" in result) {
               const proceed = confirm(
@@ -358,6 +382,15 @@ export default function ScheduleForm({
                 {matchedPackage.used_sessions >= matchedPackage.total_sessions
                   ? `คอร์สนี้ใช้ครบ ${matchedPackage.total_sessions} ครั้งแล้ว จะไม่หักจากคอร์ส`
                   : `จะหักจากคอร์สที่ซื้อไว้ (เหลือ ${matchedPackage.total_sessions - matchedPackage.used_sessions}/${matchedPackage.total_sessions} ครั้ง)`}
+              </p>
+            )}
+
+            {mismatchedPackage && (
+              <p className="text-xs font-medium text-red-600 sm:col-span-2">
+                ⚠️ {studentNameValue.trim()} มีคอร์ส &quot;{COURSE_TYPE_LABEL[mismatchedPackage.course_type as CourseType]}
+                &quot; ค้างอยู่ (เหลือ {mismatchedPackage.total_sessions - mismatchedPackage.used_sessions}/
+                {mismatchedPackage.total_sessions} ครั้ง) แต่กำลังลงเป็น &quot;{COURSE_TYPE_LABEL[courseType]}&quot; แทน —
+                ถ้าไม่ตั้งใจ เปลี่ยนประเภทคอร์สให้ตรงกันก่อนบันทึก
               </p>
             )}
 
