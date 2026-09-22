@@ -4,8 +4,9 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { computePayout } from "@/lib/payout";
 import { durationHours } from "@/lib/slots";
-import { FIXED_COURSE_TYPES, isDurationScaled, isFixedCourseType, isPackageCourseType } from "@/lib/courseTypes";
+import { isFixedCourseType, isPackageCourseType } from "@/lib/courseTypes";
 import { dayOfWeekOf, isWithinAvailability, saveAvailability } from "@/lib/availability";
+import { resolvePricing } from "@/lib/pricing";
 
 async function requireAdmin() {
   const supabase = await createClient();
@@ -150,31 +151,6 @@ function readScheduleFields(formData: FormData) {
     course_type: String(formData.get("course_type") || "custom"),
     custom_price: Number(formData.get("price") || 0),
   };
-}
-
-function roundMoney(amount: number): number {
-  return Math.round(amount * 100) / 100;
-}
-
-/** Fixed course types store a per-hour rate, scaled by the class's actual duration (so
- *  extending/shortening a class in the schedule form recalculates price/payout) — except
- *  types marked non-scaled (e.g. skate dance's fixed 90-minute slot), which always charge
- *  the flat amount regardless of duration. Always pays the same rate regardless of
- *  instructor. "custom" falls back to that instructor's own rate_type/rate_value and is
- *  entered as a flat total, not scaled by duration. */
-function resolvePricing(
-  courseType: string,
-  customPrice: number,
-  rateType: "fixed" | "percent",
-  rateValue: number,
-  hours: number,
-) {
-  if (isFixedCourseType(courseType)) {
-    const { price, payout } = FIXED_COURSE_TYPES[courseType];
-    const factor = isDurationScaled(courseType) ? hours : 1;
-    return { price: roundMoney(price * factor), instructor_payout: roundMoney(payout * factor) };
-  }
-  return { price: customPrice, instructor_payout: computePayout(rateType, rateValue, customPrice) };
 }
 
 type PackageMatch = { id: string; legacyPrice: number | null; legacyPayout: number | null };

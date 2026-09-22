@@ -23,6 +23,14 @@ const INSTRUCTORS_PER_PAGE = 10;
 // doubling row count as badly as a per-minute grid would.
 const GRID_SLOT_MINUTES = 30;
 
+/** COURSE_TYPE_LABEL bakes the price into package-type labels (e.g. "Basic Slalom 10
+ *  ครั้ง (800/คาบ)") for the admin-facing dropdowns — strip that parenthetical for the
+ *  printed board, which shouldn't show pricing at all. */
+function printCourseLabel(courseType: string): string {
+  const label = COURSE_TYPE_LABEL[courseType as keyof typeof COURSE_TYPE_LABEL] ?? courseType;
+  return label.replace(/\s*\([^)]*\)\s*$/, "");
+}
+
 const COLUMN_THEMES = [
   { header: "bg-blue-600", cell: "bg-blue-50", border: "border-blue-200" },
   { header: "bg-orange-500", cell: "bg-orange-50", border: "border-orange-200" },
@@ -50,10 +58,15 @@ type GridCell =
   | { render: true; rowSpan: number; kind: "open" | "closed" };
 
 /** One entry per row for a single instructor column: a session, or a run of consecutive
- *  open/closed slots, collapses into one rowSpan'd cell on its first row, `render: false`
- *  on the rows it covers after that (so the <table> doesn't double-paint them). A slot
- *  outside the instructor's declared availability shows "closed" instead of "open" so the
- *  board makes clear they're not taking bookings then, not just that nothing's booked yet. */
+ *  closed slots, collapses into one rowSpan'd cell on its first row, `render: false` on
+ *  the rows it covers after that (so the <table> doesn't double-paint them). Open ("ว่าง")
+ *  slots are deliberately never merged — each stays its own single-row cell so its border
+ *  is a real per-row boundary the browser positions itself, always exactly matching the
+ *  time column no matter how tall any other row ends up rendering (a fixed-height/rowSpan
+ *  trick for a "ruled line" here would drift out of sync the moment a neighboring cell's
+ *  content wraps to an extra line). A slot outside the instructor's declared availability
+ *  shows "closed" instead of "open" so the board makes clear they're not taking bookings
+ *  then, not just that nothing's booked yet. */
 function buildColumn(
   instructorId: string,
   slotTimes: string[],
@@ -91,16 +104,16 @@ function buildColumn(
       continue;
     }
 
-    const closed = isClosedAt(slot);
+    if (!isClosedAt(slot)) {
+      cells.push({ render: true, rowSpan: 1, kind: "open" });
+      continue;
+    }
+
     let span = 1;
-    while (
-      i + span < slotTimes.length &&
-      !hasSessionAt(slotTimes[i + span]) &&
-      isClosedAt(slotTimes[i + span]) === closed
-    ) {
+    while (i + span < slotTimes.length && !hasSessionAt(slotTimes[i + span]) && isClosedAt(slotTimes[i + span])) {
       span++;
     }
-    cells.push({ render: true, rowSpan: span, kind: closed ? "closed" : "open" });
+    cells.push({ render: true, rowSpan: span, kind: "closed" });
     skipRemaining = span - 1;
   }
   return cells;
@@ -241,7 +254,7 @@ export default async function CalendarPrintPage({ params }: { params: Promise<{ 
                   <tbody>
                     {slotTimes.map((slot, rowIndex) => (
                       <tr key={slot}>
-                        <td className="border-b border-blue-950/10 bg-blue-50 p-2 text-center text-xs font-medium text-blue-950 sm:text-sm">
+                        <td className="h-11 border-b border-gray-300 bg-blue-50 p-2 text-center text-xs font-medium text-blue-950 sm:text-sm">
                           {slot}-{addMinutes(slot, GRID_SLOT_MINUTES)}
                         </td>
                         {pageInstructors.map((ins, i) => {
@@ -253,33 +266,23 @@ export default async function CalendarPrintPage({ params }: { params: Promise<{ 
                             <td
                               key={ins.id}
                               rowSpan={cell.rowSpan}
-                              className={`border-b border-l ${theme.border} p-1.5 align-top text-[11px] leading-snug sm:text-xs ${
+                              className={`h-11 border-b border-l border-gray-300 p-1.5 text-center text-[11px] leading-snug sm:text-xs ${
                                 s ? theme.cell : cell.kind === "closed" ? "bg-gray-100" : "bg-white"
                               }`}
                             >
-                              {s ? (
-                                <div className="space-y-0.5">
-                                  <span className="inline-block rounded-full bg-amber-200 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">
-                                    เต็ม {s.start_time.slice(0, 5)}-{s.end_time.slice(0, 5)}
-                                  </span>
-                                  <p className="font-medium text-gray-800">
-                                    {COURSE_TYPE_LABEL[s.course_type as keyof typeof COURSE_TYPE_LABEL] ?? s.course_type}
-                                  </p>
-                                  {s.student_name ? <p className="text-gray-600">นร. {s.student_name}</p> : null}
-                                </div>
-                              ) : cell.kind === "closed" ? (
-                                <div className="flex h-full flex-col items-center justify-center gap-1 py-1">
-                                  <span className="rounded-full bg-gray-300 px-1.5 py-0.5 text-[10px] font-bold text-gray-700">
-                                    ปิดรับสอน
-                                  </span>
-                                </div>
-                              ) : (
-                                // Left blank on purpose — this is the printed board's writable space for
-                                // penciling in a walk-in booking by hand, not just "nothing booked yet".
-                                <div className="flex h-full min-h-8 flex-col justify-end py-1">
-                                  <span className="w-full border-b border-dashed border-gray-300" />
-                                </div>
-                              )}
+                              {/* Same centered, plain-text shape for every state — only the background
+                                  color tells booked/closed/open apart, so the grid reads as one
+                                  consistent surface instead of three differently-styled widgets. */}
+                              <div className="flex h-full flex-col items-center justify-center gap-0.5">
+                                {s ? (
+                                  <>
+                                    <p className="font-medium text-gray-800">{printCourseLabel(s.course_type)}</p>
+                                    {s.student_name ? <p className="text-gray-600">{s.student_name}</p> : null}
+                                  </>
+                                ) : cell.kind === "closed" ? (
+                                  <p className="font-medium text-gray-600">ปิดรับสอน</p>
+                                ) : null}
+                              </div>
                             </td>
                           );
                         })}
