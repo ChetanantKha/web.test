@@ -703,6 +703,64 @@ export async function deletePackage(packageId: string) {
 }
 
 // ============================================================
+// package-link audit (bookkeeping fix for sessions that should have
+// counted against a package but never got linked)
+// ============================================================
+
+/** Links a not-yet-linked session to a package and bumps used_sessions by 1 — the
+ *  fix for [[audit findings]] where a session's name+instructor+course-type clearly
+ *  matches an existing package but was never counted against it (booked before the
+ *  package existed, or the wrong course type was picked at the time). Only touches
+ *  the count — the session's own price/instructor_payout/course_type are left exactly
+ *  as originally recorded, since that money already changed hands; this just corrects
+ *  the package's remaining-session tally. Writes an audit_log entry so there's a
+ *  record of what was adjusted and why. */
+export async function linkOrphanedSessionToPackage(sessionId: string, packageId: string) {
+  return asResult(async () => {
+    const { supabase, adminId } = await requireAdmin();
+
+    const { data: existingSession } = await supabase.from("sessions").select("*").eq("id", sessionId).single();
+    if (!existingSession) throw new Error("ไม่พบคาบเรียน");
+    if (existingSession.package_id) throw new Error("คาบนี้ถูกเชื่อมกับคอร์สอื่นไปแล้ว");
+
+    const { data: pkg } = await supabase.from("course_packages").select("*").eq("id", packageId).single();
+    if (!pkg) throw new Error("ไม่พบคอร์ส");
+    if (pkg.instructor_id !== existingSession.instructor_id) throw new Error("ผู้สอนของคาบนี้ไม่ตรงกับคอร์ส");
+
+    const newUsedSessions = pkg.used_sessions + 1;
+
+    const { error: sessionError } = await supabase
+      .from("sessions")
+      .update({ package_id: packageId })
+      .eq("id", sessionId);
+    if (sessionError) throw new Error(sessionError.message);
+
+    const { error: pkgError } = await supabase
+      .from("course_packages")
+      .update({ used_sessions: newUsedSessions })
+      .eq("id", packageId);
+    if (pkgError) throw new Error(pkgError.message);
+
+    await supabase.from("audit_log").insert({
+      session_id: sessionId,
+      action: "update",
+      changed_by: adminId,
+      old_data: { ...existingSession, _package_used_sessions_before: pkg.used_sessions },
+      new_data: {
+        ...existingSession,
+        package_id: packageId,
+        _package_used_sessions_after: newUsedSessions,
+        _source: "package_audit_fix",
+      },
+    });
+
+    revalidatePath("/admin/packages");
+    revalidatePath("/admin/packages/audit");
+    return { newUsedSessions, totalSessions: pkg.total_sessions };
+  });
+}
+
+// ============================================================
 // instructor weekly availability
 // ============================================================
 export async function updateInstructorAvailability(instructorId: string, formData: FormData) {
