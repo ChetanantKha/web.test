@@ -10,7 +10,6 @@ type Instructor = { id: string; full_name: string };
 export default function DayView({
   date,
   slotTimes,
-  slotMinutes,
   sessions,
   instructors,
   studentNames,
@@ -18,7 +17,6 @@ export default function DayView({
 }: {
   date: string;
   slotTimes: string[];
-  slotMinutes: number;
   sessions: Session[];
   instructors: Instructor[];
   studentNames: string[];
@@ -78,7 +76,6 @@ export default function DayView({
           instructors={instructors}
           studentNames={studentNames}
           packages={packages}
-          slotMinutes={slotMinutes}
           editing={editing}
           prefillStart={prefillStart}
           onDone={() => {

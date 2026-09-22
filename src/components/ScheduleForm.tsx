@@ -17,12 +17,19 @@ import type { CoursePackage, Session } from "@/lib/types";
 
 type Instructor = { id: string; full_name: string };
 
+// "slalom"/"slalom_10" (Slalom/Slide) is the old combined course type, superseded by the
+// more granular basic_slide/basic_slalom split — see wiki: tstar-academy-course-pricing.md.
+// New bookings shouldn't be able to pick it; it only still shows up for students who
+// already have a package locked into it (see hasLegacySlalomPackage below).
+const NEW_COURSE_TYPE_ENTRIES = Object.entries(COURSE_TYPE_LABEL).filter(
+  ([value]) => value !== "slalom" && value !== "slalom_10",
+);
+
 export default function ScheduleForm({
   date,
   instructors,
   studentNames,
   packages,
-  slotMinutes,
   editing,
   prefillStart,
   onDone,
@@ -31,7 +38,6 @@ export default function ScheduleForm({
   instructors: Instructor[];
   studentNames: string[];
   packages: CoursePackage[];
-  slotMinutes: number;
   editing: Session | null;
   prefillStart: string | null;
   onDone: () => void;
@@ -60,6 +66,21 @@ export default function ScheduleForm({
         )
       : undefined;
 
+  // Only students already grandfathered into the old Slalom/Slide package keep the option
+  // to book more sessions against it — everyone else sees just the current course types.
+  const hasLegacySlalomPackage =
+    !!selectedInstructorId &&
+    !!studentNameValue.trim() &&
+    packages.some(
+      (p) =>
+        p.instructor_id === selectedInstructorId &&
+        p.course_type === "slalom_10" &&
+        p.student_name.trim().toLowerCase() === studentNameValue.trim().toLowerCase(),
+    );
+  const isEditingLegacySlalom = editing?.course_type === "slalom" || editing?.course_type === "slalom_10";
+  const courseTypeOptions =
+    hasLegacySlalomPackage || isEditingLegacySlalom ? Object.entries(COURSE_TYPE_LABEL) : NEW_COURSE_TYPE_ENTRIES;
+
   const previewHours =
     startTime && endTimeValue ? Math.round(durationHours(startTime, endTimeValue) * 100) / 100 : 0;
   const pricePreview = (() => {
@@ -71,11 +92,14 @@ export default function ScheduleForm({
     return { scaled, price: Math.round(price * factor * 100) / 100, payout: Math.round(payout * factor * 100) / 100 };
   })();
 
+  // Default class length is 1 hour regardless of the calendar's own grid granularity
+  // (settings.slot_minutes, which can be 30 — that's just how finely the day's slot
+  // buttons are spaced, not how long a class should default to).
   function defaultEndTime(start: string, type: CourseType = courseType) {
     if (type === "skate_dance" || type === "skate_dance_10") return "16:30";
     if (!start) return "";
     const [h, m] = start.split(":").map(Number);
-    const total = h * 60 + m + slotMinutes;
+    const total = h * 60 + m + 60;
     return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
   }
 
@@ -307,7 +331,7 @@ export default function ScheduleForm({
                 }}
                 className={inputClass}
               >
-                {Object.entries(COURSE_TYPE_LABEL).map(([value, label]) => (
+                {courseTypeOptions.map(([value, label]) => (
                   <option key={value} value={value}>
                     {label}
                   </option>
@@ -390,7 +414,7 @@ export default function ScheduleForm({
                         }
                         className={inputClass}
                       >
-                        {Object.entries(COURSE_TYPE_LABEL).map(([value, label]) => (
+                        {NEW_COURSE_TYPE_ENTRIES.map(([value, label]) => (
                           <option key={value} value={value}>
                             {label}
                           </option>

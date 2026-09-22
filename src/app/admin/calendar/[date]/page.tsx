@@ -62,7 +62,6 @@ export default async function CalendarDayPage({ params }: { params: Promise<{ da
       <DayView
         date={date}
         slotTimes={slotTimes}
-        slotMinutes={settings?.slot_minutes ?? 60}
         sessions={(sessions ?? []) as Session[]}
         instructors={instructors ?? []}
         studentNames={studentNames}
