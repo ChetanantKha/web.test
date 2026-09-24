@@ -65,7 +65,8 @@ export default async function PackageAuditPage() {
           <h1 className="text-lg font-semibold">ตรวจสอบคอร์สที่นับไม่ครบ</h1>
           <p className="text-sm text-gray-500">
             หาคาบเรียนที่ชื่อนักเรียน + ผู้สอน + ประเภทคอร์ส ตรงกับคอร์สแพ็กเกจที่มีอยู่ แต่ไม่ได้ถูกเชื่อม/นับเข้าคอร์ส
-            (เช่น จองเป็นรายชั่วโมงไปโดยที่จริงๆ ควรหักจากคอร์สแพ็กเกจ) แก้แค่ &quot;จำนวนครั้งที่นับ&quot; เท่านั้น
+            (เช่น จองเป็นรายชั่วโมงไปโดยที่จริงๆ ควรหักจากคอร์สแพ็กเกจ) หรือคอร์สที่ตัวเลขคลาดเคลื่อนจากคาบที่เชื่อมไว้จริง
+            (เช่น คอร์สแบบคิดตามชั่วโมง แต่เคยถูกนับเป็น 1 ต่อคาบมาก่อน) แก้แค่ &quot;จำนวนที่นับ&quot; เท่านั้น
             ราคา/ยอดจ่ายผู้สอนของคาบเดิมจะไม่ถูกแก้ย้อนหลัง
           </p>
         </div>
@@ -74,7 +75,16 @@ export default async function PackageAuditPage() {
         </Link>
       </div>
 
-      <PackageAuditList findings={findings} fixHistory={fixHistory} />
+      <PackageAuditList
+        findings={findings}
+        fixHistory={fixHistory}
+        allPackages={allPackages.map((p) => ({
+          id: p.id,
+          student_name: p.student_name,
+          course_type: p.course_type,
+          total_sessions: p.total_sessions,
+        }))}
+      />
     </div>
   );
 }

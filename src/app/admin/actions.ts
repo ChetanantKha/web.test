@@ -4,9 +4,9 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { computePayout } from "@/lib/payout";
 import { durationHours } from "@/lib/slots";
-import { isFixedCourseType, isPackageCourseType } from "@/lib/courseTypes";
+import { isDurationScaled, isFixedCourseType, isPackageCourseType } from "@/lib/courseTypes";
 import { dayOfWeekOf, isWithinAvailability, saveAvailability } from "@/lib/availability";
-import { resolvePricing } from "@/lib/pricing";
+import { resolvePricing, roundMoney } from "@/lib/pricing";
 
 async function requireAdmin() {
   const supabase = await createClient();
@@ -158,12 +158,17 @@ type PackageMatch = { id: string; legacyPrice: number | null; legacyPayout: numb
 /** Finds the student's active package for this instructor/course_type with sessions
  *  left, and bumps its used_sessions by 1. Returns the package (with any locked-in legacy
  *  price/payout) to store on the new session, or null if there's no matching package
- *  (session is just billed alone at the current rate). */
+ *  (session is just billed alone at the current rate). Duration-scaled course types
+ *  (everything except e.g. skate dance's fixed 90-minute slot — see isDurationScaled)
+ *  count against the package by the class's actual hours, not a flat 1 per booking, since
+ *  a "10 ครั้ง" package on one of these types means 10 hours, not 10 bookings — a 2-hour
+ *  class draws it down by 2. */
 async function linkToPackage(
   supabase: Awaited<ReturnType<typeof createClient>>,
   instructorId: string,
   studentName: string | null,
   courseType: string,
+  hours: number,
 ): Promise<PackageMatch | null> {
   if (!studentName?.trim() || !isPackageCourseType(courseType)) return null;
 
@@ -178,16 +183,23 @@ async function linkToPackage(
   const match = (candidates ?? []).find((p) => p.used_sessions < p.total_sessions);
   if (!match) return null;
 
+  const increment = isDurationScaled(courseType) ? hours : 1;
   await supabase
     .from("course_packages")
-    .update({ used_sessions: match.used_sessions + 1 })
+    .update({ used_sessions: roundMoney(match.used_sessions + increment) })
     .eq("id", match.id);
 
   return { id: match.id, legacyPrice: match.legacy_price, legacyPayout: match.legacy_payout };
 }
 
-/** Undoes linkToPackage's count when a linked session is cancelled. */
-async function unlinkFromPackage(supabase: Awaited<ReturnType<typeof createClient>>, packageId: string | null) {
+/** Undoes linkToPackage's count when a linked session is cancelled — same hours-vs-count
+ *  rule, so deleting a 2-hour class returns 2 to the package, not 1. */
+async function unlinkFromPackage(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  packageId: string | null,
+  courseType: string,
+  hours: number,
+) {
   if (!packageId) return;
 
   const { data: pkg } = await supabase
@@ -197,9 +209,10 @@ async function unlinkFromPackage(supabase: Awaited<ReturnType<typeof createClien
     .single();
   if (!pkg) return;
 
+  const decrement = isDurationScaled(courseType) ? hours : 1;
   await supabase
     .from("course_packages")
-    .update({ used_sessions: Math.max(0, pkg.used_sessions - 1) })
+    .update({ used_sessions: Math.max(0, roundMoney(pkg.used_sessions - decrement)) })
     .eq("id", packageId);
 }
 
@@ -231,18 +244,13 @@ export async function createSchedule(formData: FormData) {
       return { needsAvailabilityConfirm: true as const, instructorName: instructor.full_name };
     }
 
-    const pkg = await linkToPackage(supabase, fields.instructor_id, fields.student_name, fields.course_type);
+    const hours = durationHours(fields.start_time, fields.end_time);
+    const pkg = await linkToPackage(supabase, fields.instructor_id, fields.student_name, fields.course_type, hours);
 
     const { price, instructor_payout } =
       pkg?.legacyPrice != null
         ? { price: pkg.legacyPrice, instructor_payout: pkg.legacyPayout ?? 0 }
-        : resolvePricing(
-            fields.course_type,
-            custom_price,
-            instructor.rate_type,
-            instructor.rate_value,
-            durationHours(fields.start_time, fields.end_time),
-          );
+        : resolvePricing(fields.course_type, custom_price, instructor.rate_type, instructor.rate_value, hours);
 
     const { error } = await supabase.from("sessions").insert({
       ...fields,
@@ -284,6 +292,7 @@ export async function createBulkSchedule(formData: FormData) {
     const instructorIds = formData.getAll("instructor_ids").map(String);
     if (instructorIds.length === 0) throw new Error("กรุณาเลือกผู้สอนอย่างน้อย 1 คน");
 
+    const hours = durationHours(start_time, end_time);
     const result: BulkScheduleResult = { created: 0, failed: [], outsideAvailability: [] };
 
     for (const instructorId of instructorIds) {
@@ -306,18 +315,12 @@ export async function createBulkSchedule(formData: FormData) {
         const withinAvailability = await checkAvailability(supabase, instructorId, session_date, start_time, end_time);
         if (!withinAvailability) result.outsideAvailability.push(name);
 
-        const pkg = await linkToPackage(supabase, instructorId, student_name, course_type);
+        const pkg = await linkToPackage(supabase, instructorId, student_name, course_type, hours);
 
         const { price, instructor_payout } =
           pkg?.legacyPrice != null
             ? { price: pkg.legacyPrice, instructor_payout: pkg.legacyPayout ?? 0 }
-            : resolvePricing(
-                course_type,
-                custom_price,
-                instructor.rate_type,
-                instructor.rate_value,
-                durationHours(start_time, end_time),
-              );
+            : resolvePricing(course_type, custom_price, instructor.rate_type, instructor.rate_value, hours);
 
         const { error } = await supabase.from("sessions").insert({
           instructor_id: instructorId,
@@ -410,7 +413,12 @@ export async function deleteSchedule(sessionId: string) {
     const { error } = await supabase.from("sessions").delete().eq("id", sessionId);
     if (error) throw new Error(error.message);
 
-    await unlinkFromPackage(supabase, existing.package_id);
+    await unlinkFromPackage(
+      supabase,
+      existing.package_id,
+      existing.course_type,
+      durationHours(existing.start_time.slice(0, 5), existing.end_time.slice(0, 5)),
+    );
 
     await supabase.from("audit_log").insert({
       session_id: sessionId,
@@ -605,6 +613,9 @@ export async function createPackage(formData: FormData) {
     if (!student_name) throw new Error("กรุณากรอกชื่อผู้เรียน");
     if (!instructor_id) throw new Error("กรุณาเลือกผู้สอน");
     if (!isPackageCourseType(course_type)) throw new Error("ประเภทคอร์สไม่ถูกต้อง");
+    // Slalom/Slide's old combined price is retired — block it here too, not just in the
+    // form's dropdown, in case something posts this course_type directly.
+    if (course_type === "slalom_10") throw new Error("Slalom/Slide เลิกใช้แล้ว ไม่สามารถสร้างคอร์สใหม่ประเภทนี้ได้");
     if (total_sessions <= 0) throw new Error("จำนวนครั้งทั้งหมดต้องมากกว่า 0");
     if (used_sessions < 0) throw new Error("จำนวนครั้งที่ใช้ไปแล้วต้องไม่ติดลบ");
 
@@ -703,7 +714,9 @@ export async function linkOrphanedSessionToPackage(sessionId: string, packageId:
     if (!pkg) throw new Error("ไม่พบคอร์ส");
     if (pkg.instructor_id !== existingSession.instructor_id) throw new Error("ผู้สอนของคาบนี้ไม่ตรงกับคอร์ส");
 
-    const newUsedSessions = pkg.used_sessions + 1;
+    const hours = durationHours(existingSession.start_time.slice(0, 5), existingSession.end_time.slice(0, 5));
+    const increment = isDurationScaled(existingSession.course_type) ? hours : 1;
+    const newUsedSessions = roundMoney(pkg.used_sessions + increment);
 
     const { error: sessionError } = await supabase
       .from("sessions")
@@ -733,6 +746,111 @@ export async function linkOrphanedSessionToPackage(sessionId: string, packageId:
     revalidatePath("/admin/packages");
     revalidatePath("/admin/packages/audit");
     return { newUsedSessions, totalSessions: pkg.total_sessions };
+  });
+}
+
+/** One-time correction tool: recomputes a package's used_sessions from scratch off the
+ *  actual hours (or count, for non-duration-scaled types like skate dance) of every session
+ *  currently linked to it — the linked sessions are the source of truth, not an
+ *  incrementally tracked counter, so this fixes drift regardless of cause. Needed because
+ *  every booking used to count as a flat 1 before "10 ครั้ง" was clarified to mean 10 hours
+ *  for duration-scaled course types, so existing packages' used_sessions were built up under
+ *  the old rule. */
+export async function recalculatePackageUsage(packageId: string) {
+  return asResult(async () => {
+    const { supabase, adminId } = await requireAdmin();
+
+    const { data: pkg } = await supabase.from("course_packages").select("*").eq("id", packageId).single();
+    if (!pkg) throw new Error("ไม่พบคอร์ส");
+
+    const { data: linkedSessions } = await supabase
+      .from("sessions")
+      .select("start_time, end_time, course_type")
+      .eq("package_id", packageId);
+
+    const recomputed = roundMoney(
+      (linkedSessions ?? []).reduce((sum, s) => {
+        const hours = durationHours(s.start_time.slice(0, 5), s.end_time.slice(0, 5));
+        return sum + (isDurationScaled(s.course_type) ? hours : 1);
+      }, 0),
+    );
+
+    if (recomputed === pkg.used_sessions) return { changed: false, usedSessions: pkg.used_sessions };
+
+    const { error } = await supabase.from("course_packages").update({ used_sessions: recomputed }).eq("id", packageId);
+    if (error) throw new Error(error.message);
+
+    await supabase.from("audit_log").insert({
+      session_id: null,
+      action: "update",
+      changed_by: adminId,
+      old_data: { ...pkg, _source: "package_hours_recalc" },
+      new_data: { ...pkg, used_sessions: recomputed, _source: "package_hours_recalc" },
+    });
+
+    revalidatePath("/admin/packages");
+    revalidatePath("/admin/packages/audit");
+    return { changed: true, usedSessions: recomputed, totalSessions: pkg.total_sessions };
+  });
+}
+
+/** Undoes every recalculatePackageUsage change on record — restores each affected
+ *  package's used_sessions to what it was right before its *first* recalculation (not
+ *  just the most recent one, in case it was run more than once), using the values
+ *  recalculatePackageUsage itself wrote to audit_log.old_data. Only the numbers are
+ *  restored; the hours-based counting rule keeps applying to bookings from here on — this
+ *  is purely "undo that specific batch of edits," not a rule rollback. */
+export async function undoPackageHoursRecalc() {
+  return asResult(async () => {
+    const { supabase, adminId } = await requireAdmin();
+
+    const { data: logs } = await supabase
+      .from("audit_log")
+      .select("*")
+      .eq("action", "update")
+      .order("changed_at", { ascending: true });
+
+    const originalByPackageId = new Map<string, number>();
+    for (const row of logs ?? []) {
+      const newData = row.new_data as Record<string, unknown> | null;
+      const oldData = row.old_data as Record<string, unknown> | null;
+      if (newData?._source !== "package_hours_recalc") continue;
+      const packageId = newData.id as string;
+      // Oldest entry per package wins, so a package recalculated more than once still goes
+      // back to its true original value, not an intermediate one.
+      if (!originalByPackageId.has(packageId)) {
+        originalByPackageId.set(packageId, oldData?.used_sessions as number);
+      }
+    }
+
+    const restored: { studentName: string; usedSessions: number }[] = [];
+    for (const [packageId, originalUsedSessions] of originalByPackageId) {
+      const { data: pkg } = await supabase
+        .from("course_packages")
+        .select("student_name, used_sessions")
+        .eq("id", packageId)
+        .single();
+      if (!pkg || pkg.used_sessions === originalUsedSessions) continue;
+
+      const { error } = await supabase
+        .from("course_packages")
+        .update({ used_sessions: originalUsedSessions })
+        .eq("id", packageId);
+      if (error) continue;
+
+      await supabase.from("audit_log").insert({
+        session_id: null,
+        action: "update",
+        changed_by: adminId,
+        old_data: { id: packageId, used_sessions: pkg.used_sessions, _source: "package_hours_recalc_undo" },
+        new_data: { id: packageId, used_sessions: originalUsedSessions, _source: "package_hours_recalc_undo" },
+      });
+      restored.push({ studentName: pkg.student_name, usedSessions: originalUsedSessions });
+    }
+
+    revalidatePath("/admin/packages");
+    revalidatePath("/admin/packages/audit");
+    return { restored };
   });
 }
 

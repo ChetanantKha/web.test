@@ -3,6 +3,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import PackageForm from "@/components/PackageForm";
 import PackageRow from "@/components/PackageRow";
+import { durationHours } from "@/lib/slots";
+import { isDurationScaled } from "@/lib/courseTypes";
 import type { CoursePackage } from "@/lib/types";
 
 export default async function PackagesPage() {
@@ -27,7 +29,11 @@ export default async function PackagesPage() {
       supabase.from("sessions").select("student_name").not("student_name", "is", null),
       // sessions never linked to a package (e.g. scheduled before the package existed) —
       // used to top up each package's displayed count without touching used_sessions itself
-      supabase.from("sessions").select("instructor_id, course_type, student_name").is("package_id", null).not("student_name", "is", null),
+      supabase
+        .from("sessions")
+        .select("instructor_id, course_type, student_name, start_time, end_time")
+        .is("package_id", null)
+        .not("student_name", "is", null),
     ]);
 
   const studentNames = [...new Set((studentNameRows ?? []).map((s) => s.student_name).filter(Boolean))] as string[];
@@ -39,7 +45,10 @@ export default async function PackagesPage() {
   for (const s of orphanSessions ?? []) {
     if (!s.student_name) continue;
     const key = orphanKey(s.instructor_id, s.course_type, s.student_name);
-    orphanCounts.set(key, (orphanCounts.get(key) ?? 0) + 1);
+    const amount = isDurationScaled(s.course_type)
+      ? durationHours(s.start_time.slice(0, 5), s.end_time.slice(0, 5))
+      : 1;
+    orphanCounts.set(key, Math.round(((orphanCounts.get(key) ?? 0) + amount) * 100) / 100);
   }
 
   return (

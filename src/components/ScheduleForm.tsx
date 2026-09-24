@@ -10,6 +10,7 @@ import {
   isDurationScaled,
   isFixedCourseType,
   isPackageCourseType,
+  packageUnitLabel,
   type CourseType,
 } from "@/lib/courseTypes";
 import { durationHours } from "@/lib/slots";
@@ -170,7 +171,7 @@ export default function ScheduleForm({
             if (mismatchedPackage) {
               const remaining = mismatchedPackage.total_sessions - mismatchedPackage.used_sessions;
               const proceed = confirm(
-                `${studentNameValue.trim()} มีคอร์ส "${COURSE_TYPE_LABEL[mismatchedPackage.course_type as CourseType]}" ค้างอยู่ (เหลือ ${remaining}/${mismatchedPackage.total_sessions} ครั้ง) แต่กำลังจะลงเป็น "${COURSE_TYPE_LABEL[courseType]}" แทน ใช่คนเดียวกันแต่ตั้งใจลงนอกคอร์สหรือเปล่า? กด OK เพื่อลงต่อ`,
+                `${studentNameValue.trim()} มีคอร์ส "${COURSE_TYPE_LABEL[mismatchedPackage.course_type as CourseType]}" ค้างอยู่ (เหลือ ${remaining}/${mismatchedPackage.total_sessions} ${packageUnitLabel(mismatchedPackage.course_type)}) แต่กำลังจะลงเป็น "${COURSE_TYPE_LABEL[courseType]}" แทน ใช่คนเดียวกันแต่ตั้งใจลงนอกคอร์สหรือเปล่า? กด OK เพื่อลงต่อ`,
               );
               if (!proceed) return;
             }
@@ -380,8 +381,8 @@ export default function ScheduleForm({
                 }`}
               >
                 {matchedPackage.used_sessions >= matchedPackage.total_sessions
-                  ? `คอร์สนี้ใช้ครบ ${matchedPackage.total_sessions} ครั้งแล้ว จะไม่หักจากคอร์ส`
-                  : `จะหักจากคอร์สที่ซื้อไว้ (เหลือ ${matchedPackage.total_sessions - matchedPackage.used_sessions}/${matchedPackage.total_sessions} ครั้ง)`}
+                  ? `คอร์สนี้ใช้ครบ ${matchedPackage.total_sessions} ${packageUnitLabel(matchedPackage.course_type)}แล้ว จะไม่หักจากคอร์ส`
+                  : `จะหักจากคอร์สที่ซื้อไว้ (เหลือ ${matchedPackage.total_sessions - matchedPackage.used_sessions}/${matchedPackage.total_sessions} ${packageUnitLabel(matchedPackage.course_type)})`}
               </p>
             )}
 
@@ -389,8 +390,8 @@ export default function ScheduleForm({
               <p className="text-xs font-medium text-red-600 sm:col-span-2">
                 ⚠️ {studentNameValue.trim()} มีคอร์ส &quot;{COURSE_TYPE_LABEL[mismatchedPackage.course_type as CourseType]}
                 &quot; ค้างอยู่ (เหลือ {mismatchedPackage.total_sessions - mismatchedPackage.used_sessions}/
-                {mismatchedPackage.total_sessions} ครั้ง) แต่กำลังลงเป็น &quot;{COURSE_TYPE_LABEL[courseType]}&quot; แทน —
-                ถ้าไม่ตั้งใจ เปลี่ยนประเภทคอร์สให้ตรงกันก่อนบันทึก
+                {mismatchedPackage.total_sessions} {packageUnitLabel(mismatchedPackage.course_type)}) แต่กำลังลงเป็น &quot;
+                {COURSE_TYPE_LABEL[courseType]}&quot; แทน — ถ้าไม่ตั้งใจ เปลี่ยนประเภทคอร์สให้ตรงกันก่อนบันทึก
               </p>
             )}
 

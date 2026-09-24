@@ -60,10 +60,24 @@ export function isFixedCourseType(courseType: string): courseType is Exclude<Cou
   return (FIXED_COURSE_TYPE_KEYS as string[]).includes(courseType);
 }
 
-/** Whether this course type's price/payout should be multiplied by the class's actual
- *  duration in hours (true for everything except flat-rate types like skate dance). */
-export function isDurationScaled(courseType: Exclude<CourseType, "custom">): boolean {
-  return FIXED_COURSE_TYPES[courseType].scaled !== false;
+/** Whether this course type's price/payout/package-hour-count should be multiplied by the
+ *  class's actual duration in hours (true for everything except flat-rate types like skate
+ *  dance). Accepts a plain string (not just a known CourseType) so callers holding a raw
+ *  `sessions.course_type` value don't need to narrow it first; an unrecognized type falls
+ *  back to `true` (scaled), matching every known type except the explicit `scaled: false`
+ *  ones. */
+export function isDurationScaled(courseType: string): boolean {
+  return FIXED_COURSE_TYPES[courseType as Exclude<CourseType, "custom">]?.scaled !== false;
+}
+
+/** What a package's total_sessions/used_sessions numbers actually count in: "ชั่วโมง" (hours)
+ *  for duration-scaled types — a 2-hour class draws one of these packages down by 2, not 1,
+ *  since "10 ครั้ง" on these types means 10 hours, not 10 bookings — or "ครั้ง" (times/
+ *  bookings) for fixed-duration types like skate dance, where every booking is the same
+ *  length anyway so counting bookings and counting hours would only differ by a constant
+ *  factor. */
+export function packageUnitLabel(courseType: string): "ชั่วโมง" | "ครั้ง" {
+  return isDurationScaled(courseType) ? "ชั่วโมง" : "ครั้ง";
 }
 
 /** Course types sold as a multi-session package that course_packages tracks usage for. */

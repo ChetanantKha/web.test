@@ -4,9 +4,16 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createPackage } from "@/app/admin/actions";
 import ErrorAlert from "@/components/ErrorAlert";
-import { PACKAGE_COURSE_TYPE_LABEL, type PackageCourseType } from "@/lib/courseTypes";
+import { PACKAGE_COURSE_TYPE_LABEL, packageUnitLabel, type PackageCourseType } from "@/lib/courseTypes";
 
 type Instructor = { id: string; full_name: string };
+
+// "slalom_10" (Slalom/Slide, the old combined price) is retired — no *new* package should
+// ever be created on it again. Existing slalom_10 packages keep working everywhere else
+// (display, pricing, booking more sessions against them); this only blocks creating more.
+const NEW_PACKAGE_COURSE_TYPE_ENTRIES = (
+  Object.entries(PACKAGE_COURSE_TYPE_LABEL) as [PackageCourseType, string][]
+).filter(([value]) => value !== "slalom_10");
 
 export default function PackageForm({
   instructors,
@@ -19,6 +26,8 @@ export default function PackageForm({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [useLegacyPricing, setUseLegacyPricing] = useState(false);
+  const [courseType, setCourseType] = useState("");
+  const unit = courseType ? packageUnitLabel(courseType) : "ครั้ง/ชั่วโมง";
 
   return (
     <form
@@ -33,6 +42,7 @@ export default function PackageForm({
           router.refresh();
           (document.getElementById("package-form") as HTMLFormElement | null)?.reset();
           setUseLegacyPricing(false);
+          setCourseType("");
         });
       }}
       id="package-form"
@@ -73,11 +83,17 @@ export default function PackageForm({
 
         <div className="space-y-1">
           <label className="block text-sm font-medium">ประเภทคอร์ส</label>
-          <select name="course_type" required defaultValue="" className={inputClass}>
+          <select
+            name="course_type"
+            required
+            value={courseType}
+            onChange={(e) => setCourseType(e.target.value)}
+            className={inputClass}
+          >
             <option value="" disabled>
               เลือกประเภทคอร์ส
             </option>
-            {(Object.entries(PACKAGE_COURSE_TYPE_LABEL) as [PackageCourseType, string][]).map(([value, label]) => (
+            {NEW_PACKAGE_COURSE_TYPE_ENTRIES.map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
               </option>
@@ -86,13 +102,13 @@ export default function PackageForm({
         </div>
 
         <div className="space-y-1">
-          <label className="block text-sm font-medium">จำนวนครั้งทั้งหมด</label>
-          <input type="number" name="total_sessions" min={1} required defaultValue={10} className={inputClass} />
+          <label className="block text-sm font-medium">จำนวน{unit}ทั้งหมด</label>
+          <input type="number" name="total_sessions" min={1} step="0.5" required defaultValue={10} className={inputClass} />
         </div>
 
         <div className="space-y-1">
-          <label className="block text-sm font-medium">ใช้ไปแล้ว (ก่อนเริ่มใช้ระบบ)</label>
-          <input type="number" name="used_sessions" min={0} defaultValue={0} className={inputClass} />
+          <label className="block text-sm font-medium">ใช้ไปแล้ว ({unit}, ก่อนเริ่มใช้ระบบ)</label>
+          <input type="number" name="used_sessions" min={0} step="0.5" defaultValue={0} className={inputClass} />
         </div>
 
         <div className="space-y-1 sm:col-span-2">

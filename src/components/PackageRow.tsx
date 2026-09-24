@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { deletePackage, updatePackage } from "@/app/admin/actions";
 import ErrorAlert from "@/components/ErrorAlert";
-import { COURSE_TYPE_LABEL } from "@/lib/courseTypes";
+import { COURSE_TYPE_LABEL, packageUnitLabel } from "@/lib/courseTypes";
 import type { CoursePackage } from "@/lib/types";
 
 type Instructor = { id: string; full_name: string };
@@ -38,6 +38,7 @@ export default function PackageRow({
   const remaining = pkg.total_sessions - effectiveUsed;
   const isLow = pkg.status === "active" && remaining <= 2 && remaining > 0;
   const isFull = pkg.status === "active" && remaining <= 0;
+  const unit = packageUnitLabel(pkg.course_type);
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm">
@@ -53,10 +54,10 @@ export default function PackageRow({
                 isFull ? "font-medium text-red-600" : isLow ? "font-medium text-orange-600" : undefined
               }
             >
-              {effectiveUsed}/{pkg.total_sessions} ครั้ง
+              {effectiveUsed}/{pkg.total_sessions} {unit}
             </span>
             {orphanCount > 0 && (
-              <span className="text-gray-400"> (รวมคาบเก่าก่อนสร้างคอร์ส {orphanCount} ครั้ง)</span>
+              <span className="text-gray-400"> (รวมคาบเก่าก่อนสร้างคอร์ส {orphanCount} {unit})</span>
             )}{" "}
             · {STATUS_LABEL[pkg.status]}
             {pkg.legacy_price != null && (
@@ -114,22 +115,24 @@ export default function PackageRow({
             </select>
           </div>
           <div className="space-y-1">
-            <label className="block font-medium">จำนวนครั้งทั้งหมด</label>
+            <label className="block font-medium">จำนวน{unit}ทั้งหมด</label>
             <input
               type="number"
               name="total_sessions"
               min={1}
+              step="0.5"
               defaultValue={pkg.total_sessions}
               required
               className="w-full rounded-lg border border-gray-300 px-3 py-2"
             />
           </div>
           <div className="space-y-1">
-            <label className="block font-medium">ใช้ไปแล้ว</label>
+            <label className="block font-medium">ใช้ไปแล้ว ({unit})</label>
             <input
               type="number"
               name="used_sessions"
               min={0}
+              step="0.5"
               defaultValue={pkg.used_sessions}
               className="w-full rounded-lg border border-gray-300 px-3 py-2"
             />
