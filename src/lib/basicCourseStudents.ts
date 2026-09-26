@@ -29,3 +29,26 @@ export async function listBasicCourseStudentNames(
   }
   return [...names].sort((a, b) => a.localeCompare(b, "th"));
 }
+
+/** Distinct student names this specific instructor has actually taught — any course_type,
+ *  not just Basic — used to scope the /staff/students list to "students I teach" instead of
+ *  every student in the shared checklist system. Lowercased for case-insensitive matching
+ *  against `students.full_name`, consistent with findOrCreateStudent()'s ilike matching. */
+export async function listStudentNamesTaughtByInstructor(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  instructorId: string,
+): Promise<Set<string>> {
+  const [{ data: sessionNames }, { data: packageNames }] = await Promise.all([
+    supabase.from("sessions").select("student_name").eq("instructor_id", instructorId),
+    supabase.from("course_packages").select("student_name").eq("instructor_id", instructorId),
+  ]);
+
+  const names = new Set<string>();
+  for (const row of sessionNames ?? []) {
+    if (row.student_name?.trim()) names.add(row.student_name.trim().toLowerCase());
+  }
+  for (const row of packageNames ?? []) {
+    if (row.student_name?.trim()) names.add(row.student_name.trim().toLowerCase());
+  }
+  return names;
+}

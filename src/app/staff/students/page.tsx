@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import StudentListView from "@/components/StudentListView";
-import { listBasicCourseStudentNames } from "@/lib/basicCourseStudents";
+import { listBasicCourseStudentNames, listStudentNamesTaughtByInstructor } from "@/lib/basicCourseStudents";
 import type { SkillLevel } from "@/lib/skillTricks";
 
 export default async function StaffStudentsPage() {
@@ -9,12 +9,14 @@ export default async function StaffStudentsPage() {
   const {
     data: { session },
   } = await supabase.auth.getSession();
-  if (!session?.user) redirect("/login");
+  const user = session?.user ?? null;
+  if (!user) redirect("/login");
 
-  const [{ data: students }, { data: checks }, basicNames] = await Promise.all([
+  const [{ data: students }, { data: checks }, basicNames, myNames] = await Promise.all([
     supabase.from("students").select("id, full_name").order("full_name"),
     supabase.from("student_skill_checks").select("student_id, trick_key, level"),
     listBasicCourseStudentNames(supabase),
+    listStudentNamesTaughtByInstructor(supabase, user.id),
   ]);
 
   const levelsByStudent = new Map<string, Map<string, SkillLevel>>();
@@ -24,10 +26,12 @@ export default async function StaffStudentsPage() {
     levelsByStudent.set(c.student_id, map);
   }
 
-  const existingNames = new Set((students ?? []).map((s) => s.full_name.trim().toLowerCase()));
-  const pendingNames = basicNames.filter((n) => !existingNames.has(n.toLowerCase()));
+  // Instructors only see students they've actually taught (any course_type) — admin still
+  // sees everyone (see /admin/students), this page is instructor-scoped by request.
+  const myStudents = (students ?? []).filter((s) => myNames.has(s.full_name.trim().toLowerCase()));
 
-  return (
-    <StudentListView basePath="/staff/students" students={students ?? []} levelsByStudent={levelsByStudent} pendingNames={pendingNames} />
-  );
+  const existingNames = new Set(myStudents.map((s) => s.full_name.trim().toLowerCase()));
+  const pendingNames = basicNames.filter((n) => myNames.has(n.toLowerCase()) && !existingNames.has(n.toLowerCase()));
+
+  return <StudentListView basePath="/staff/students" students={myStudents} levelsByStudent={levelsByStudent} pendingNames={pendingNames} />;
 }
