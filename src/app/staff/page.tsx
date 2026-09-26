@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import StaffPayoutForm from "@/components/StaffPayoutForm";
 import StaffSessionList from "@/components/StaffSessionList";
@@ -39,6 +40,13 @@ export default async function StaffPage() {
         <h1 className="text-lg font-semibold">สวัสดี {profile?.full_name ?? ""}</h1>
         <p className="text-sm text-gray-500">ตารางสอนทั้งหมดของฉัน (แอดมินเป็นผู้จัดตารางให้)</p>
       </div>
+
+      <Link
+        href="/staff/students"
+        className="block rounded-xl border border-gray-200 bg-white p-3 text-sm font-medium text-blue-950 hover:border-orange-300"
+      >
+        นักเรียน &amp; เช็คลิสต์ท่า →
+      </Link>
 
       {profile && <StaffPayoutForm profile={profile as Profile} />}
 

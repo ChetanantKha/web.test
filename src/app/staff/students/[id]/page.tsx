@@ -1,0 +1,27 @@
+import { notFound, redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import StudentDetailView from "@/components/StudentDetailView";
+import type { SkillLevel } from "@/lib/skillTricks";
+
+export default async function StaffStudentDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const supabase = await createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session?.user) redirect("/login");
+
+  const { id } = await params;
+
+  const [{ data: student }, { data: checks }] = await Promise.all([
+    supabase.from("students").select("id, full_name, parent_phone").eq("id", id).single(),
+    supabase.from("student_skill_checks").select("trick_key, level, notes").eq("student_id", id),
+  ]);
+  if (!student) notFound();
+
+  const ratings: [string, { level: SkillLevel; notes: string }][] = (checks ?? []).map((c) => [
+    c.trick_key,
+    { level: c.level as SkillLevel, notes: c.notes ?? "" },
+  ]);
+
+  return <StudentDetailView student={student} ratings={ratings} />;
+}

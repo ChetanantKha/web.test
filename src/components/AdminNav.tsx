@@ -11,6 +11,7 @@ const links = [
   { href: "/admin/calendar", label: "ปฏิทิน" },
   { href: "/admin/list", label: "รายการทั้งหมด" },
   { href: "/admin/packages", label: "คอร์สนักเรียน" },
+  { href: "/admin/students", label: "บันทึกการสอน" },
   { href: "/admin/instructors", label: "จัดการผู้สอน" },
   { href: "/admin/settings", label: "ตั้งค่า" },
 ];
