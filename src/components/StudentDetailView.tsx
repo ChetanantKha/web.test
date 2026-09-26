@@ -42,7 +42,7 @@ export default function StudentDetailView({
       </div>
 
       {graduated && (
-        <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-sm font-medium text-emerald-700">
+        <div className="animate-celebrate-pop rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-sm font-medium text-emerald-700">
           🎓 ผ่านเกณฑ์ {GRADUATION_THRESHOLD_PERCENT}% ของ Basic Course แล้ว — พร้อมเลื่อนไปเรียน Basic Slalom
         </div>
       )}

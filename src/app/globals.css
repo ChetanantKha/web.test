@@ -67,3 +67,60 @@ body {
 .animate-alert-in {
   animation: alert-in 0.18s ease-out;
 }
+
+/* Per-page fade/slide on navigation (PageTransition.tsx) — short and GPU-cheap
+   (transform/opacity only) on purpose, see that component's comment for why. */
+@keyframes page-in {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-page-in {
+  animation: page-in 0.18s ease-out;
+}
+
+/* One-off celebration moments (Day 1 unlock toast, 80% graduation badge) — kept short
+   (<=500ms) and non-looping so they can't become an ongoing CPU/battery cost. */
+@keyframes celebrate-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.9) translateY(-4px);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.03) translateY(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-celebrate-pop {
+  animation: celebrate-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Respect the user's OS-level motion preference, and skip all of this in print — a real
+   accessibility/perf escape hatch, not just the print-preview snapshot. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-mascot-fly,
+  .animate-mascot-motionlines,
+  .animate-alert-in,
+  .animate-page-in,
+  .animate-celebrate-pop {
+    animation: none !important;
+  }
+}
+
+@media print {
+  .animate-page-in,
+  .animate-celebrate-pop {
+    animation: none !important;
+  }
+}

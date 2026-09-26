@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import LogoutButton from "@/components/LogoutButton";
 import FinishPrompt from "@/components/FinishPrompt";
 import AvailabilityConflictPrompt from "@/components/AvailabilityConflictPrompt";
+import PageTransition from "@/components/PageTransition";
 
 export default async function StaffLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -22,7 +23,7 @@ export default async function StaffLayout({ children }: { children: React.ReactN
         </div>
         <LogoutButton variant="dark" />
       </div>
-      {children}
+      <PageTransition>{children}</PageTransition>
       <FinishPrompt instructorId={user.id} />
       <AvailabilityConflictPrompt instructorId={user.id} />
     </div>

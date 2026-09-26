@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { setSkillLevel, clearSkillCheck } from "@/lib/skillActions";
 import { SKILL_TRICKS, SKILL_CATEGORY_LABEL, LEVEL_LABEL, isDay1Complete, type SkillCategory, type SkillLevel } from "@/lib/skillTricks";
@@ -132,9 +132,22 @@ export default function StudentSkillChecklist({
   initialRatings: [string, Rating][];
 }) {
   const [ratings, setRatings] = useState<Map<string, Rating>>(new Map(initialRatings));
+  const [showUnlockToast, setShowUnlockToast] = useState(false);
+  const wasDay1Done = useRef<boolean | null>(null); // null = not yet known (initial render)
 
   const levelsOnly = new Map<string, SkillLevel>([...ratings].map(([key, r]) => [key, r.level]));
   const day1Done = isDay1Complete(levelsOnly);
+
+  // Cutscene moment: only when Day 1 flips false -> true live in this session, not on a
+  // fresh page load where it was already complete — a toast every reload would be noise.
+  useEffect(() => {
+    const justUnlocked = wasDay1Done.current === false && day1Done;
+    wasDay1Done.current = day1Done;
+    if (!justUnlocked) return;
+    setShowUnlockToast(true);
+    const timer = setTimeout(() => setShowUnlockToast(false), 2200);
+    return () => clearTimeout(timer);
+  }, [day1Done]);
 
   function updateRating(key: string, next: Rating | null) {
     setRatings((prev) => {
@@ -147,6 +160,11 @@ export default function StudentSkillChecklist({
 
   return (
     <div className="space-y-4">
+      {showUnlockToast && (
+        <div className="animate-celebrate-pop rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-center text-sm font-semibold text-emerald-700">
+          ✨ ผ่าน Day 1 แล้ว! ปลดล็อกท่าหมวดอื่นทั้งหมด
+        </div>
+      )}
       {CATEGORY_ORDER.map((category) => {
         const tricks = SKILL_TRICKS.filter((t) => t.category === category);
         const locked = category !== "day1" && !day1Done;
