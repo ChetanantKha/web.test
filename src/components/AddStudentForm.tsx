@@ -40,8 +40,17 @@ export default function AddStudentForm({ basePath }: { basePath: string }) {
     >
       {error && <ErrorAlert message={error} />}
       <div className="flex flex-wrap gap-2">
-        <input name="full_name" placeholder="ชื่อนักเรียน" required className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm" />
-        <input name="parent_phone" placeholder="เบอร์ผู้ปกครอง (ถ้ามี)" className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+        <input
+          name="full_name"
+          placeholder="ชื่อนักเรียน"
+          required
+          className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+        />
+        <input
+          name="parent_phone"
+          placeholder="เบอร์ผู้ปกครอง (ถ้ามี)"
+          className="min-w-0 flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+        />
       </div>
       <div className="flex gap-2">
         <button

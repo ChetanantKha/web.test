@@ -24,7 +24,13 @@ export default function StatRadarChart({ scores, size = 260 }: { scores: Record<
   const dataPath = dataPoints.map((p) => `${p.x},${p.y}`).join(" ");
 
   return (
-    <svg viewBox={`0 0 ${size} ${size}`} width={size} height={size} role="img" aria-label="กราฟสเตตัสความคล่องตัว">
+    <svg
+      viewBox={`0 0 ${size} ${size}`}
+      className="h-auto w-full"
+      style={{ maxWidth: size }}
+      role="img"
+      aria-label="กราฟสเตตัสความคล่องตัว"
+    >
       {rings.map((r) => (
         <polygon
           key={r}

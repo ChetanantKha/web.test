@@ -28,10 +28,17 @@ export default function PendingStudentRow({ name, basePath }: { name: string; ba
             if (result && "id" in result) router.push(`${basePath}/${result.id}`);
           })
         }
-        className="flex w-full items-center justify-between gap-2 text-left text-sm disabled:opacity-50"
+        className="flex w-full min-w-0 items-center justify-between gap-2 text-left text-sm disabled:opacity-50"
       >
-        <span className="font-medium text-gray-700">{name}</span>
-        <span className="text-xs text-gray-400">{pending ? "กำลังเปิด..." : "ลงคอร์ส Basic ไว้แล้ว — แตะเพื่อเริ่มเช็คลิสต์"}</span>
+        <span className="min-w-0 truncate font-medium text-gray-700">{name}</span>
+        <span className="shrink-0 text-xs text-gray-400">
+          {pending ? "กำลังเปิด..." : (
+            <>
+              <span className="hidden sm:inline">ลงคอร์ส Basic ไว้แล้ว — แตะเพื่อเริ่มเช็คลิสต์</span>
+              <span className="sm:hidden">แตะเพื่อเริ่ม</span>
+            </>
+          )}
+        </span>
       </button>
       {error && (
         <div className="mt-1">

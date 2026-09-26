@@ -19,7 +19,7 @@ export default function StudentListView({
 }) {
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-lg font-semibold">นักเรียน &amp; เช็คลิสต์ท่า</h1>
         <AddStudentForm basePath={basePath} />
       </div>
@@ -34,18 +34,21 @@ export default function StudentListView({
             <Link
               key={s.id}
               href={`${basePath}/${s.id}`}
-              className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-3 shadow-sm hover:border-orange-300"
+              className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-gray-200 bg-white p-3 shadow-sm hover:border-orange-300"
             >
-              <span className="font-medium">
+              <span className="min-w-0 truncate font-medium">
                 {s.full_name} {graduated && <span title="พร้อมเลื่อน Basic Slalom">🎓</span>}
               </span>
-              <span className="flex items-center gap-3 text-xs text-gray-500">
+              {/* Full per-axis breakdown only fits comfortably from sm up — on a phone,
+                  name + 4 labels + % on one line forces horizontal overflow/pinch-zoom. */}
+              <span className="hidden shrink-0 items-center gap-3 text-xs text-gray-500 sm:flex">
                 <span>Forward {scores.forward}</span>
                 <span>Backward {scores.backward}</span>
                 <span>Turning {scores.turning}</span>
                 <span>Breaking {scores.breaking}</span>
                 <span className="font-semibold text-orange-600">{progress}%</span>
               </span>
+              <span className="shrink-0 text-xs font-semibold text-orange-600 sm:hidden">{progress}%</span>
             </Link>
           );
         })}

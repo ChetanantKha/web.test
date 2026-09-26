@@ -29,13 +29,13 @@ export default function StudentDetailView({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <h1 className="text-lg font-semibold">{student.full_name}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h1 className="truncate text-lg font-semibold">{student.full_name}</h1>
           {student.parent_phone && <p className="text-sm text-gray-500">ผู้ปกครอง: {student.parent_phone}</p>}
         </div>
         {printHref && (
-          <Link href={printHref} className="rounded-lg border border-gray-300 px-3 py-2 text-sm">
+          <Link href={printHref} className="shrink-0 rounded-lg border border-gray-300 px-3 py-2 text-sm">
             พิมพ์รายงานให้ผู้ปกครอง →
           </Link>
         )}
@@ -48,7 +48,9 @@ export default function StudentDetailView({
       )}
 
       <div className="flex flex-col items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 sm:flex-row sm:justify-around">
-        <StatRadarChart scores={scores} />
+        <div className="w-full max-w-[260px]">
+          <StatRadarChart scores={scores} />
+        </div>
         <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
           {(Object.keys(scores) as (keyof typeof scores)[]).map((axis) => (
             <div key={axis}>
