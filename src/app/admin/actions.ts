@@ -6,7 +6,7 @@ import { computePayout } from "@/lib/payout";
 import { durationHours } from "@/lib/slots";
 import { isDurationScaled, isFixedCourseType, isPackageCourseType } from "@/lib/courseTypes";
 import { dayOfWeekOf, isWithinAvailability, saveAvailability } from "@/lib/availability";
-import { resolvePricing, roundMoney } from "@/lib/pricing";
+import { resolvePricing, resolveLegacyPricing, roundMoney } from "@/lib/pricing";
 
 async function requireAdmin() {
   const supabase = await createClient();
@@ -249,7 +249,7 @@ export async function createSchedule(formData: FormData) {
 
     const { price, instructor_payout } =
       pkg?.legacyPrice != null
-        ? { price: pkg.legacyPrice, instructor_payout: pkg.legacyPayout ?? 0 }
+        ? resolveLegacyPricing(fields.course_type, pkg.legacyPrice, pkg.legacyPayout ?? 0, hours)
         : resolvePricing(fields.course_type, custom_price, instructor.rate_type, instructor.rate_value, hours);
 
     const { error } = await supabase.from("sessions").insert({
@@ -319,7 +319,7 @@ export async function createBulkSchedule(formData: FormData) {
 
         const { price, instructor_payout } =
           pkg?.legacyPrice != null
-            ? { price: pkg.legacyPrice, instructor_payout: pkg.legacyPayout ?? 0 }
+            ? resolveLegacyPricing(course_type, pkg.legacyPrice, pkg.legacyPayout ?? 0, hours)
             : resolvePricing(course_type, custom_price, instructor.rate_type, instructor.rate_value, hours);
 
         const { error } = await supabase.from("sessions").insert({
@@ -376,13 +376,25 @@ export async function updateSchedule(sessionId: string, formData: FormData) {
       .single();
     if (!instructor) throw new Error("ไม่พบผู้สอน");
 
-    const { price, instructor_payout } = resolvePricing(
-      fields.course_type,
-      custom_price,
-      instructor.rate_type,
-      instructor.rate_value,
-      durationHours(fields.start_time, fields.end_time),
-    );
+    const hours = durationHours(fields.start_time, fields.end_time);
+
+    // Editing doesn't re-run linkToPackage (the session's package_id, if any, is left as-is) —
+    // but if it IS linked to a legacy-priced package, re-pricing on edit (e.g. a time change)
+    // must still honor that lock instead of falling back to the current rate table.
+    let legacyPkg: { legacy_price: number | null; legacy_payout: number | null } | null = null;
+    if (existing.package_id) {
+      const { data } = await supabase
+        .from("course_packages")
+        .select("legacy_price, legacy_payout")
+        .eq("id", existing.package_id)
+        .single();
+      legacyPkg = data;
+    }
+
+    const { price, instructor_payout } =
+      legacyPkg?.legacy_price != null
+        ? resolveLegacyPricing(fields.course_type, legacyPkg.legacy_price, legacyPkg.legacy_payout ?? 0, hours)
+        : resolvePricing(fields.course_type, custom_price, instructor.rate_type, instructor.rate_value, hours);
 
     const { error } = await supabase
       .from("sessions")

@@ -276,8 +276,8 @@ export default async function CalendarPrintPage({ params }: { params: Promise<{ 
                               <div className="flex h-full flex-col items-center justify-center gap-0.5">
                                 {s ? (
                                   <>
-                                    <p className="font-medium text-gray-800">{printCourseLabel(s.course_type)}</p>
-                                    {s.student_name ? <p className="text-gray-600">{s.student_name}</p> : null}
+                                    <p className="w-full truncate font-medium text-gray-800">{printCourseLabel(s.course_type)}</p>
+                                    {s.student_name ? <p className="w-full truncate text-gray-600">{s.student_name}</p> : null}
                                   </>
                                 ) : cell.kind === "closed" ? (
                                   <p className="font-medium text-gray-600">ปิดรับสอน</p>

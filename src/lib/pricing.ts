@@ -25,3 +25,12 @@ export function resolvePricing(
   }
   return { price: customPrice, instructor_payout: computePayout(rateType, rateValue, customPrice) };
 }
+
+/** A package's locked legacy price/payout ("ราคาที่ล็อกไว้") is a per-hour rate, same as the
+ *  current rate table — scaled by the same isDurationScaled rule (flat course types like skate
+ *  dance still ignore actual duration), so a legacy-priced 2-hour class charges 2x the locked
+ *  rate instead of the flat locked number regardless of length. */
+export function resolveLegacyPricing(courseType: string, legacyPrice: number, legacyPayout: number, hours: number) {
+  const factor = isDurationScaled(courseType) ? hours : 1;
+  return { price: roundMoney(legacyPrice * factor), instructor_payout: roundMoney(legacyPayout * factor) };
+}
