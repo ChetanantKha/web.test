@@ -9,6 +9,13 @@
     size: A4 landscape;
     margin: 10mm;
   }
+
+  /* Force background colors to print regardless of the browser's own
+     "Background graphics" print-dialog toggle (off by default). */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }
 
 body {
