@@ -2,6 +2,7 @@ import AdminNav from "@/components/AdminNav";
 import PendingApprovals from "@/components/PendingApprovals";
 import RejectedSessionAlert from "@/components/RejectedSessionAlert";
 import PageTransition from "@/components/PageTransition";
+import HomeButton from "@/components/HomeButton";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -23,6 +24,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <PendingApprovals />
         <RejectedSessionAlert instructors={instructors ?? []} />
       </div>
+      <HomeButton href="/admin" />
     </div>
   );
 }

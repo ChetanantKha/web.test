@@ -5,6 +5,7 @@ import LogoutButton from "@/components/LogoutButton";
 import FinishPrompt from "@/components/FinishPrompt";
 import AvailabilityConflictPrompt from "@/components/AvailabilityConflictPrompt";
 import PageTransition from "@/components/PageTransition";
+import HomeButton from "@/components/HomeButton";
 
 export default async function StaffLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -26,6 +27,7 @@ export default async function StaffLayout({ children }: { children: React.ReactN
       <PageTransition>{children}</PageTransition>
       <FinishPrompt instructorId={user.id} />
       <AvailabilityConflictPrompt instructorId={user.id} />
+      <HomeButton href="/staff" />
     </div>
   );
 }
