@@ -23,5 +23,5 @@ export default async function StaffStudentDetailPage({ params }: { params: Promi
     { level: c.level as SkillLevel, notes: c.notes ?? "" },
   ]);
 
-  return <StudentDetailView student={student} ratings={ratings} />;
+  return <StudentDetailView student={student} ratings={ratings} backHref="/staff/students" />;
 }

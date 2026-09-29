@@ -14,10 +14,13 @@ import {
 export default function StudentDetailView({
   student,
   ratings,
+  backHref,
   printHref,
 }: {
   student: { id: string; full_name: string; parent_phone: string | null };
   ratings: [string, { level: SkillLevel; notes: string }][];
+  /** Back to the student list this was opened from (admin's or staff's — different paths). */
+  backHref: string;
   /** Only admin passes this — printable parent-facing report is admin-only. */
   printHref?: string;
 }) {
@@ -29,6 +32,10 @@ export default function StudentDetailView({
 
   return (
     <div className="space-y-4">
+      <Link href={backHref} className="text-sm underline">
+        ← กลับไปรายชื่อนักเรียน
+      </Link>
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <h1 className="truncate text-lg font-semibold">{student.full_name}</h1>

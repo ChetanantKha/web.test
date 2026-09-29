@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import PrintButton from "@/components/PrintButton";
 import StatRadarChart from "@/components/StatRadarChart";
@@ -50,7 +51,10 @@ export default async function StudentProgressPrintPage({ params }: { params: Pro
 
   return (
     <div className="space-y-6 print:space-y-4">
-      <div className="flex items-center justify-between print:hidden">
+      <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
+        <Link href={`/admin/students/${id}`} className="text-sm underline">
+          ← กลับไปหน้านักเรียน
+        </Link>
         <p className="text-xs text-gray-500">
           ก่อนกดพิมพ์: เปิดตัวเลือก &quot;พิมพ์พื้นหลัง / Background graphics&quot; ในหน้าต่างพิมพ์ ไม่งั้นสีจะหาย
         </p>
