@@ -446,6 +446,49 @@ export async function deleteSchedule(sessionId: string) {
   });
 }
 
+/** Bulk version of deleteSchedule for a whole-rink closure (e.g. flooding) — cancels every
+ *  session booked on a given date, across every instructor, with the same per-session
+ *  cleanup (package hours restored via unlinkFromPackage, an audit_log "delete" row each)
+ *  rather than a separate "cancelled" status, matching how a single cancellation already
+ *  works in this app. `reason` is optional and stored on each audit_log row's `new_data`
+ *  (normally null on delete) so there's a record of *why* a day's schedule went empty. */
+export async function cancelAllSessionsForDate(date: string, reason: string | null) {
+  return asResult(async () => {
+    const { supabase, adminId } = await requireAdmin();
+
+    const { data: sessions } = await supabase.from("sessions").select("*").eq("session_date", date);
+    const toCancel = sessions ?? [];
+
+    for (const existing of toCancel) {
+      const { error } = await supabase.from("sessions").delete().eq("id", existing.id);
+      if (error) throw new Error(error.message);
+
+      await unlinkFromPackage(
+        supabase,
+        existing.package_id,
+        existing.course_type,
+        durationHours(existing.start_time.slice(0, 5), existing.end_time.slice(0, 5)),
+      );
+
+      await supabase.from("audit_log").insert({
+        session_id: existing.id,
+        action: "delete",
+        changed_by: adminId,
+        old_data: existing,
+        new_data: reason ? { bulk_cancel_reason: reason } : null,
+      });
+    }
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/list");
+    revalidatePath("/admin/packages");
+    revalidatePath(`/admin/calendar/${date}`);
+    revalidatePath("/admin/calendar");
+
+    return { cancelledCount: toCancel.length };
+  });
+}
+
 /** Reassigns a class to a substitute instructor (e.g. the original can't make it) —
  *  the class fully becomes the substitute's from here on (their schedule, their payout),
  *  with the original instructor kept only in audit_log for history. For "custom"

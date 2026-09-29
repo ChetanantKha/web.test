@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import DayView from "@/components/DayView";
+import CancelAllSessionsButton from "@/components/CancelAllSessionsButton";
 import { buildSlotTimes } from "@/lib/slots";
 import { formatThaiDate } from "@/lib/date";
 import type { CoursePackage, Session } from "@/lib/types";
@@ -47,7 +48,7 @@ export default async function CalendarDayPage({ params }: { params: Promise<{ da
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-lg font-semibold">ตารางวันที่ {formatThaiDate(date)}</h1>
         <div className="flex items-center gap-3 text-sm">
           <Link href={`/admin/calendar/${date}/print`} className="underline">
@@ -58,6 +59,8 @@ export default async function CalendarDayPage({ params }: { params: Promise<{ da
           </Link>
         </div>
       </div>
+
+      <CancelAllSessionsButton date={date} sessionCount={(sessions ?? []).length} />
 
       <DayView
         date={date}
